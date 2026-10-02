@@ -73,6 +73,15 @@ describe("wh_helper", function()
         h:cleanup()
     end)
 
+    it("passes the file name when text goes as a file", function()
+        local bin = fake.write(tmp, { '{"ev":"done"}' })
+        local h = assert(helper.start({ bin = bin, command = "send-text", text = "hola", file_name = "hola.txt", tmp = tmp }))
+        fake.poll_until(h, has("done"))
+        assert.equal("send-text --control " .. h.dir .. " --text-file " .. h.dir .. "/text --file-name hola.txt",
+            io.open(h.dir .. "/argv"):read("*l"))
+        h:cleanup()
+    end)
+
     it("passes the temp folder for zipping folders", function()
         local bin = fake.write(tmp, { '{"ev":"done"}' })
         local h = assert(helper.start({ bin = bin, command = "send-files", name = "B", paths = { "/b" },

@@ -127,6 +127,28 @@ function M.ask_code(prefill, on_code)
     dialog:onShowKeyboard()
 end
 
+--- Ask whether to send text as text or as a .txt file. on_choice(as_file).
+function M.ask_text_mode(on_choice)
+    local ButtonDialog = require("ui/widget/buttondialog")
+    local dialog
+    local function choose(as_file)
+        return function()
+            UIManager:close(dialog)
+            on_choice(as_file)
+        end
+    end
+    dialog = ButtonDialog:new{
+        title = _("Send text"),
+        title_align = "center",
+        buttons = {
+            { { text = _("As text"), callback = choose(false) },
+              { text = _("As a file (.txt)"), callback = choose(true) } },
+            { { text = _("Cancel"), callback = function() UIManager:close(dialog) end } },
+        },
+    }
+    UIManager:show(dialog)
+end
+
 --- Received text, with Copy and Close.
 function M.show_text(text)
     local viewer

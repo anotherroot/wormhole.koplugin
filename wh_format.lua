@@ -44,11 +44,29 @@ local function utf8_len(s)
     return n
 end
 
+--- A file name for text sent as a file: its first words (up to 6, about 60
+-- bytes), without characters other devices refuse, plus ".txt".
+function M.text_filename(text)
+    local words, len = {}, 0
+    for w in (text or ""):gmatch("%S+") do
+        w = w:gsub('[%c/\\:*?"<>|]', ""):gsub("%p+$", "")
+        if w ~= "" then
+            if #words > 0 and len + #w > 59 then break end
+            words[#words + 1] = w
+            len = len + #w + 1
+            if #words == 6 then break end
+        end
+    end
+    if #words == 0 then return "text.txt" end
+    return table.concat(words, " ") .. ".txt"
+end
+
 --- What the wait screen calls the thing being sent.
 -- what = { kind = "text", text = … } | { kind = "file", path = … }
 --      | { kind = "files", name = …, paths = {…} }
 function M.describe(what)
     if what.kind == "text" then
+        if what.file_name then return what.file_name end
         return string.format(_("Text (%d characters)"), utf8_len(what.text))
     elseif what.kind == "file" then
         return M.basename(what.path)

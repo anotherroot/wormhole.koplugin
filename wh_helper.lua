@@ -89,6 +89,9 @@ function M.start(spec)
         if not f then return nil, "could not write the text file" end
         f:write(spec.text); f:close()
         table.insert(args, "--text-file"); table.insert(args, dir .. "/text")
+        if spec.file_name then
+            table.insert(args, "--file-name"); table.insert(args, spec.file_name)
+        end
     elseif spec.command == "send-files" then
         table.insert(args, "--name"); table.insert(args, spec.name)
     elseif spec.command == "receive" then

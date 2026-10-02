@@ -35,6 +35,16 @@ end
 local function run() return require("wh_run") end
 local function fm() return require("apps/filemanager/filemanager").instance end
 local function top() return UIManager._window_stack[#UIManager._window_stack].widget end
+-- Press a button by its text in a ButtonDialog (rows of buttons).
+local function press(dialog, text)
+    for __, row in ipairs(dialog.buttons or {}) do
+        for i = 1, #row do
+            if row[i].text == text then row[i].callback() return true end
+        end
+    end
+    return false
+end
+
 local function close_dialogs()
     for i = #UIManager._window_stack, 1, -1 do
         local w = UIManager._window_stack[i].widget
@@ -245,6 +255,11 @@ step(8, function()
     check(button.text == "Send via wormhole", "highlight button text")
     button.callback()
 end)
+step(2, function()
+    shot("09a-ask-text-mode")
+    check(top().title == "Send text", "asks how to send text (default)")
+    check(press(top(), "As text"), "As text button")
+end)
 step(3, function()
     shot("09-reader-send")
     check(run().active and run().active.opts.what.text == "Alice", "selected text sent")
@@ -257,8 +272,27 @@ step(2, function()
     hl._highlight_buttons["12_h_wormhole"](hl, 1).callback()
 end)
 step(2, function()
-    check(run().active and run().active.opts.what.text == "casa\n\nhouse", "existing highlight sends its note")
+    check(press(top(), "As a file (.txt)"), "As a file button")
+end)
+step(3, function()
+    local what = run().active and run().active.opts.what
+    check(what and what.text == "casa\n\nhouse", "existing highlight sends its note")
+    check(what and what.file_name == "casa house.txt", "as a file named after its words: " .. tostring(what and what.file_name))
+    sh("mkdir -p cli-recv-txt && cd cli-recv-txt && " .. WH .. " receive --accept-file --hide-progress " .. run().active.dialog.code .. " > ../cli-recv-txt.log 2>&1 &")
+end)
+step(6, function()
+    check(read("cli-recv-txt/casa house.txt") == "casa\n\nhouse", "CLI received the text as a .txt file")
+    close_dialogs()
+    require("wh_files").set(G_reader_settings, "text_mode", "file")
+    local hl = require("apps/reader/readerui").instance.highlight
+    hl.selected_text = { text = "Alice" }
+    hl._highlight_buttons["12_h_wormhole"](hl, nil).callback()
+end)
+step(2, function()
+    local what = run().active and run().active.opts.what
+    check(what and what.file_name == "Alice.txt", "setting 'always as a file' skips the question")
     run().active.dialog.buttons[1].callback()
+    require("wh_files").set(G_reader_settings, "text_mode", nil)
 end)
 step(2, function()
     local ui = require("apps/reader/readerui").instance

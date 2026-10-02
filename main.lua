@@ -32,7 +32,22 @@ function Wormhole:init()
 end
 
 function Wormhole:send(what)
-    run().start({ plugin_dir = self.path, ui = self.ui, role = "send", what = what })
+    local function go()
+        run().start({ plugin_dir = self.path, ui = self.ui, role = "send", what = what })
+    end
+    if what.kind ~= "text" then return go() end
+    -- Text as text, or as a .txt file (apps on magic-wormhole.rs, e.g. Warp,
+    -- can't receive text messages). The setting decides, or we ask.
+    local function as(as_file)
+        if as_file then what.file_name = fmt().text_filename(what.text) end
+        go()
+    end
+    local mode = require("wh_files").text_mode(G_reader_settings)
+    if mode == "ask" then
+        require("wh_ui").ask_text_mode(guarded(as))
+    else
+        as(mode == "file")
+    end
 end
 
 function Wormhole:addHighlightButton()
@@ -126,6 +141,16 @@ end
 
 function Wormhole:settingsMenu()
     local files = require("wh_files")
+    local function text_mode_item(text, mode)
+        return {
+            text = text,
+            radio = true,
+            checked_func = quietly(function() return files.text_mode(G_reader_settings) == mode end, false),
+            callback = guarded(function()
+                files.set(G_reader_settings, "text_mode", mode ~= "ask" and mode or nil)
+            end),
+        }
+    end
     local Device = require("device")
     local function input(title, key, hint)
         local InputDialog = require("ui/widget/inputdialog")
@@ -149,6 +174,15 @@ function Wormhole:settingsMenu()
     return {
         text = _("Settings"),
         sub_item_table = {
+            {
+                text = _("When sending text"),
+                sub_item_table = {
+                    text_mode_item(_("Ask each time"), "ask"),
+                    text_mode_item(_("Always as text"), "text"),
+                    text_mode_item(_("Always as a file (.txt)"), "file"),
+                },
+                help_text = _("Apps built on magic-wormhole.rs, such as Warp, can't receive text, only files."),
+            },
             {
                 text_func = quietly(function()
                     return _("Save received files in: ") .. files.save_dir(G_reader_settings, Device.home_dir)

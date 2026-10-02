@@ -378,3 +378,28 @@ func (s *sizedStall) Seek(offset int64, whence int) (int64, error) {
 	}
 	return s.stallReader.Seek(offset, whence)
 }
+
+// Apps built on magic-wormhole.rs (Warp, the Android Wormhole app) can't
+// receive text messages, so text can also go as a small .txt file.
+func TestRoundTripTextAsFile(t *testing.T) {
+	cs, cr := testClients(t)
+	ctx := context.Background()
+	snd := start(func(em *Emitter) error { return SendTextAsFile(ctx, cs, em, "Dónde está.txt", weirdText) })
+	code := snd.log.waitFor(t, "code").Code
+	save, control := t.TempDir(), t.TempDir()
+	rcv := start(func(em *Emitter) error { return Receive(ctx, cr, em, code, save, control) })
+	offer := rcv.log.waitFor(t, "offer")
+	if offer.Kind != "file" || offer.Name != "Dónde está.txt" || offer.Bytes != int64(len(weirdText)) {
+		t.Fatalf("offer %+v", offer)
+	}
+	answer(t, control, "accept")
+	if err := rcv.wait(t); err != nil {
+		t.Fatal(err)
+	}
+	if b, _ := os.ReadFile(filepath.Join(save, "Dónde está.txt")); string(b) != weirdText {
+		t.Fatalf("content %q", b)
+	}
+	if err := snd.wait(t); err != nil {
+		t.Fatalf("sender: %v", err)
+	}
+}

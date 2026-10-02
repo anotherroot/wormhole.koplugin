@@ -19,7 +19,7 @@ import (
 )
 
 const usage = `usage:
-  wormhole-helper send-text  --control DIR [opts] --text-file F
+  wormhole-helper send-text  --control DIR [opts] --text-file F [--file-name NAME]
   wormhole-helper send-file  --control DIR [opts] PATH
   wormhole-helper send-files --control DIR [opts] --name NAME PATH...
   wormhole-helper receive    --control DIR [opts] --code CODE --dir DIR
@@ -41,6 +41,7 @@ func run(args []string, em *Emitter) int {
 	relay := fl.String("relay", "", "transit relay host:port")
 	textFile := fl.String("text-file", "", "file holding the text to send")
 	name := fl.String("name", "", "folder name for send-files")
+	fileName := fl.String("file-name", "", "send-text: send the text as a file with this name")
 	code := fl.String("code", "", "code to receive")
 	dir := fl.String("dir", "", "folder to save received files in")
 	tmp := fl.String("tmp", "", "folder for temporary files (default: $TMPDIR or /tmp)")
@@ -71,7 +72,11 @@ func run(args []string, em *Emitter) int {
 	case cmd == "send-text" && *textFile != "":
 		var b []byte
 		if b, err = os.ReadFile(*textFile); err == nil {
-			err = SendText(ctx, c, em, string(b))
+			if *fileName != "" {
+				err = SendTextAsFile(ctx, c, em, *fileName, string(b))
+			} else {
+				err = SendText(ctx, c, em, string(b))
+			}
 		}
 	case cmd == "send-file" && fl.NArg() == 1:
 		err = SendFile(ctx, c, em, fl.Arg(0))

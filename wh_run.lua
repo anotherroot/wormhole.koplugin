@@ -74,7 +74,7 @@ function Run:_spec()
             return nil, T(_("Can't create the folder %1"), spec.save_dir)
         end
     elseif o.what.kind == "text" then
-        spec.command, spec.text = "send-text", o.what.text
+        spec.command, spec.text, spec.file_name = "send-text", o.what.text, o.what.file_name
     elseif o.what.kind == "file" then
         spec.command, spec.paths = "send-file", { o.what.path }
     else

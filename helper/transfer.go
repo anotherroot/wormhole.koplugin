@@ -8,6 +8,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/psanford/wormhole-william/wormhole"
 )
@@ -35,6 +36,13 @@ func waitSent(ctx context.Context, em *Emitter, code string, ch chan wormhole.Se
 
 func SendText(ctx context.Context, c *wormhole.Client, em *Emitter, text string) error {
 	code, ch, err := c.SendText(ctx, text)
+	return waitSent(ctx, em, code, ch, err)
+}
+
+// SendTextAsFile sends text as a file called name: for apps that can't
+// receive text messages (magic-wormhole.rs: Warp, the Android Wormhole app).
+func SendTextAsFile(ctx context.Context, c *wormhole.Client, em *Emitter, name, text string) error {
+	code, ch, err := c.SendFile(ctx, CleanName(name), strings.NewReader(text), wormhole.WithProgress(em.Progress))
 	return waitSent(ctx, em, code, ch, err)
 }
 

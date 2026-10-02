@@ -32,6 +32,11 @@ helper_send send-text --control c --text-file text.txt
 check "text  helper -> wormhole" '[[ "$(timeout 60 wormhole receive --only-text "$CODE" 2>/dev/null)" == "$(cat text.txt)" ]]'
 wait $HP
 
+helper_send send-text --control c --text-file text.txt --file-name "text as file.txt"
+(cd recv && timeout 90 wormhole receive --accept-file --hide-progress "$CODE" >/dev/null 2>&1)
+wait $HP
+check "text as a .txt file  helper -> wormhole" 'cmp -s text.txt "recv/text as file.txt"'
+
 helper_send send-file --control c Big.epub
 (cd recv && timeout 90 wormhole receive --accept-file --hide-progress "$CODE" >/dev/null 2>&1)
 wait $HP

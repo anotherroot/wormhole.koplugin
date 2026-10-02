@@ -55,3 +55,30 @@ describe("wh_format.error_message", function()
         assert.equal("Wormhole helper failed: panic: boom", fmt.error_message("internal", "send", "panic: boom"))
     end)
 end)
+
+describe("wh_format.text_filename", function()
+    it("names a text file after its first words", function()
+        assert.equal("¿Dónde está la biblioteca Tengo prisa.txt",
+            fmt.text_filename("¿Dónde está la biblioteca? Tengo prisa, mucha prisa."))
+    end)
+
+    it("drops characters other devices refuse in names", function()
+        assert.equal("a b c.txt", fmt.text_filename('a: b/ c*\n'))
+    end)
+
+    it("keeps names short, cutting between words", function()
+        local name = fmt.text_filename(string.rep("palabra ", 30))
+        assert.is_true(#name <= 64, name)
+        assert.matches("^palabra palabra .-palabra%.txt$", name)
+    end)
+
+    it("falls back to text.txt", function()
+        assert.equal("text.txt", fmt.text_filename("  ?!  "))
+    end)
+end)
+
+describe("wh_format.describe text as a file", function()
+    it("names the file", function()
+        assert.equal("Hola.txt", fmt.describe({ kind = "text", text = "Hola", file_name = "Hola.txt" }))
+    end)
+end)

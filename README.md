@@ -19,6 +19,11 @@ Status: experimental. Tested on a Kobo Colour with KOReader v2026.03.
 | File browser select mode, then Menu → Tools → Wormhole → **Send selected files (N)** | the ticked files, as one folder |
 | Menu → Tools → Wormhole → **Receive…** | type a code to receive text, a file or a folder |
 
+Text can go as a text message or as a small `.txt` file named after its first
+words. Wormhole → Settings → **When sending text**: Ask each time (default),
+Always as text, or Always as a file. Use a file for apps that can't receive
+text messages: Warp and the Android Wormhole app (built on magic-wormhole.rs).
+
 **On the other side** use any Magic Wormhole app:
 - a computer: the `wormhole` command (`pip install magic-wormhole`, or your
   package manager), then `wormhole receive` or `wormhole send <file>`

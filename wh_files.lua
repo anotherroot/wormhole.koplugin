@@ -16,6 +16,14 @@ function M.set(store, key, value)
     store:saveSetting(M.KEY, s)
 end
 
+--- How to send text: "ask" (default), "text" or "file" (a .txt file, for apps
+-- that can't receive text messages, such as Warp).
+function M.text_mode(store)
+    local m = M.settings(store).text_mode
+    if m == "text" or m == "file" then return m end
+    return "ask"
+end
+
 --- Where received files go: the setting, else <device home>/Wormhole
 -- (/mnt/onboard/Wormhole on a Kobo).
 function M.save_dir(store, device_home)
