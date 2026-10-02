@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -310,4 +311,70 @@ func TestCancelDuringReceiveRemovesPartial(t *testing.T) {
 	if entries, _ := os.ReadDir(save); len(entries) != 0 {
 		t.Fatalf("left behind: %v", entries)
 	}
+}
+
+// stallReader sends a first chunk, then blocks until the test ends: a sender
+// whose Wi-Fi dropped mid-transfer.
+type stallReader struct {
+	*strings.Reader
+	stop chan struct{}
+}
+
+func (s stallReader) Read(p []byte) (int, error) {
+	if s.Reader.Len() == 0 {
+		<-s.stop
+		return 0, io.EOF
+	}
+	return s.Reader.Read(p)
+}
+
+func (s stallReader) Seek(offset int64, whence int) (int64, error) {
+	return s.Reader.Seek(offset, whence)
+}
+
+func TestCancelWhileSenderStalledRemovesPartial(t *testing.T) {
+	cs, cr := testClients(t)
+	stop := make(chan struct{})
+	defer close(stop)
+	// The offer says 1 MiB, but only 64 KiB ever arrives.
+	body := strings.NewReader(strings.Repeat("x", 64<<10))
+	size := int64(1 << 20)
+	code, _, err := cs.SendFile(context.Background(), "Stall.epub",
+		&sizedStall{stallReader{body, stop}, size})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	save, control := t.TempDir(), t.TempDir()
+	rcv := start(func(em *Emitter) error { return Receive(ctx, cr, em, code, save, control) })
+	rcv.log.waitFor(t, "offer")
+	answer(t, control, "accept")
+	rcv.log.waitFor(t, "progress")
+	time.Sleep(300 * time.Millisecond) // the sender is stuck now
+	cancel()
+	select {
+	case <-rcv.errc:
+	case <-time.After(3 * time.Second):
+		t.Fatal("Receive still blocked 3 s after cancel")
+	}
+	if e := rcv.log.last(); e.Ev != "error" || e.Kind != "cancelled" {
+		t.Fatalf("last %+v", e)
+	}
+	if entries, _ := os.ReadDir(save); len(entries) != 0 {
+		t.Fatalf("left behind: %v", entries)
+	}
+}
+
+// sizedStall reports a size of `size` to the sender (Seek to end), so the
+// offer promises more than stallReader will ever deliver.
+type sizedStall struct {
+	stallReader
+	size int64
+}
+
+func (s *sizedStall) Seek(offset int64, whence int) (int64, error) {
+	if whence == io.SeekEnd {
+		return s.size, nil
+	}
+	return s.stallReader.Seek(offset, whence)
 }

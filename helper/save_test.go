@@ -3,6 +3,7 @@ package main
 import (
 	"archive/zip"
 	"bytes"
+	"context"
 	"errors"
 	"io"
 	"os"
@@ -100,7 +101,7 @@ func makeZip(t *testing.T, files map[string]string) io.Reader {
 func TestSaveDirUnpacks(t *testing.T) {
 	dir := t.TempDir()
 	os.Mkdir(filepath.Join(dir, "Books"), 0o755)
-	p, err := SaveDir(dir, "Books", makeZip(t, map[string]string{"a.epub": "A", "sub/b.epub": "B"}))
+	p, err := SaveDir(context.Background(), dir, "Books", makeZip(t, map[string]string{"a.epub": "A", "sub/b.epub": "B"}))
 	if err != nil || p != filepath.Join(dir, "Books (2)") {
 		t.Fatalf("got %s %v", p, err)
 	}
@@ -113,7 +114,7 @@ func TestSaveDirUnpacks(t *testing.T) {
 func TestSaveDirRefusesEscape(t *testing.T) {
 	dir := t.TempDir()
 	for _, evil := range []string{"../evil.txt", "a/../../evil.txt", "/abs/evil.txt"} {
-		_, err := SaveDir(dir, "Books", makeZip(t, map[string]string{"ok.txt": "fine", evil: "bad"}))
+		_, err := SaveDir(context.Background(), dir, "Books", makeZip(t, map[string]string{"ok.txt": "fine", evil: "bad"}))
 		if evil == "/abs/evil.txt" {
 			// Join("dest", "/abs/evil.txt") stays inside dest: allowed, harmless.
 			if err != nil {
@@ -142,5 +143,34 @@ func assertNoPartial(t *testing.T, dir string) {
 		if strings.HasPrefix(e.Name(), ".partial-") {
 			t.Fatalf("partial left behind: %s", e.Name())
 		}
+	}
+}
+
+func TestSaveDirReplacesStalePartial(t *testing.T) {
+	dir := t.TempDir()
+	// Left behind by a helper that was killed while unpacking.
+	os.MkdirAll(filepath.Join(dir, ".partial-Books"), 0o755)
+	os.WriteFile(filepath.Join(dir, ".partial-Books", "a.epub"), []byte("old"), 0o644)
+	os.WriteFile(filepath.Join(dir, ".partial-Books.zip"), []byte("old zip"), 0o644)
+	p, err := SaveDir(context.Background(), dir, "Books", makeZip(t, map[string]string{"a.epub": "A"}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if b, _ := os.ReadFile(filepath.Join(p, "a.epub")); string(b) != "A" {
+		t.Fatalf("a.epub = %q", b)
+	}
+	assertNoPartial(t, dir)
+}
+
+func TestSaveDirStopsWhenCancelled(t *testing.T) {
+	dir := t.TempDir()
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel() // e.g. Cancel pressed while a big folder unpacks
+	_, err := SaveDir(ctx, dir, "Books", makeZip(t, map[string]string{"a.epub": "A", "b.epub": "B"}))
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("want context.Canceled, got %v", err)
+	}
+	if entries, _ := os.ReadDir(dir); len(entries) != 0 {
+		t.Fatalf("left behind: %v", entries)
 	}
 }

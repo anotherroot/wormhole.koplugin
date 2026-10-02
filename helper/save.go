@@ -2,6 +2,7 @@ package main
 
 import (
 	"archive/zip"
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -83,7 +84,7 @@ var errZipEscape = errors.New("zip entry outside the folder")
 // "<name> (2)" …). It unpacks into ".partial-<name>/" first; any entry that
 // would land outside that folder fails the whole transfer. On error
 // everything partial is removed. Returns the final folder path.
-func SaveDir(dir, name string, r io.Reader) (string, error) {
+func SaveDir(ctx context.Context, dir, name string, r io.Reader) (string, error) {
 	name = CleanName(name)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return "", err
@@ -91,6 +92,7 @@ func SaveDir(dir, name string, r io.Reader) (string, error) {
 	zipPath := filepath.Join(dir, ".partial-"+name+".zip")
 	partial := filepath.Join(dir, ".partial-"+name)
 	cleanup := func() { os.Remove(zipPath); os.RemoveAll(partial) }
+	cleanup() // leftovers of a helper that was killed while unpacking
 
 	zf, err := os.Create(zipPath)
 	if err != nil {
@@ -101,7 +103,7 @@ func SaveDir(dir, name string, r io.Reader) (string, error) {
 		err = cerr
 	}
 	if err == nil {
-		err = unzip(zipPath, partial)
+		err = unzip(ctx, zipPath, partial)
 	}
 	os.Remove(zipPath)
 	if err != nil {
@@ -116,7 +118,7 @@ func SaveDir(dir, name string, r io.Reader) (string, error) {
 	return final, nil
 }
 
-func unzip(zipPath, dest string) error {
+func unzip(ctx context.Context, zipPath, dest string) error {
 	zr, err := zip.OpenReader(zipPath)
 	if err != nil {
 		return err
@@ -126,6 +128,9 @@ func unzip(zipPath, dest string) error {
 		return err
 	}
 	for _, f := range zr.File {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		target := filepath.Join(dest, f.Name) // Join cleans "..": check the result
 		if !strings.HasPrefix(target, dest+string(os.PathSeparator)) {
 			return fmt.Errorf("%w: %s", errZipEscape, f.Name)
@@ -139,14 +144,14 @@ func unzip(zipPath, dest string) error {
 		if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
 			return err
 		}
-		if err := extractOne(f, target); err != nil {
+		if err := extractOne(ctx, f, target); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func extractOne(f *zip.File, target string) error {
+func extractOne(ctx context.Context, f *zip.File, target string) error {
 	rc, err := f.Open()
 	if err != nil {
 		return err
@@ -156,9 +161,22 @@ func extractOne(f *zip.File, target string) error {
 	if err != nil {
 		return err
 	}
-	_, err = io.Copy(out, rc)
+	_, err = io.Copy(out, cancelReader{ctx, rc})
 	if cerr := out.Close(); err == nil {
 		err = cerr
 	}
 	return err
+}
+
+// cancelReader stops a local copy (a big file being unpacked) on cancel.
+type cancelReader struct {
+	ctx context.Context
+	r   io.Reader
+}
+
+func (c cancelReader) Read(p []byte) (int, error) {
+	if err := c.ctx.Err(); err != nil {
+		return 0, err
+	}
+	return c.r.Read(p)
 }

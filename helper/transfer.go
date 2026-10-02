@@ -131,6 +131,43 @@ func DirEntries(name string, paths []string) ([]wormhole.DirectoryEntry, error) 
 	return entries, nil
 }
 
+// ctxReader makes a blocking network read return as soon as ctx is cancelled:
+// wormhole-william checks ctx only between records, so a stalled sender would
+// block a read forever. The abandoned read finishes (or not) in its goroutine;
+// the process is about to exit anyway.
+type ctxReader struct {
+	ctx context.Context
+	r   io.Reader
+	buf []byte
+}
+
+type readResult struct {
+	n   int
+	err error
+}
+
+func (c *ctxReader) Read(p []byte) (int, error) {
+	if err := c.ctx.Err(); err != nil {
+		return 0, err
+	}
+	if cap(c.buf) < len(p) {
+		c.buf = make([]byte, len(p))
+	}
+	buf := c.buf[:len(p)]
+	done := make(chan readResult, 1)
+	go func() {
+		n, err := c.r.Read(buf)
+		done <- readResult{n, err}
+	}()
+	select {
+	case <-c.ctx.Done():
+		c.buf = nil // the goroutine may still write into the old buffer
+		return 0, c.ctx.Err()
+	case res := <-done:
+		return copy(p, buf[:res.n]), res.err
+	}
+}
+
 type countingReader struct {
 	r     io.Reader
 	done  int64
@@ -183,10 +220,10 @@ func Receive(ctx context.Context, c *wormhole.Client, em *Emitter, code, saveDir
 		return errAlreadyReported
 	}
 
-	r := &countingReader{r: msg, total: msg.TransferBytes64, em: em}
+	r := &countingReader{r: &ctxReader{ctx: ctx, r: msg}, total: msg.TransferBytes64, em: em}
 	var path string
 	if isDir {
-		path, err = SaveDir(saveDir, msg.Name, r)
+		path, err = SaveDir(ctx, saveDir, msg.Name, r)
 	} else {
 		path, err = SaveFile(saveDir, msg.Name, r)
 	}
