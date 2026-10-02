@@ -96,6 +96,10 @@ Needs Nix (for luajit, busted, luacheck and appimage-run), Go, and the
 QR code for the code, code-word completion while typing, background
 transfers, saving received text, resuming a broken transfer.
 
+Before publishing a release zip: add the third-party license notices of the
+Go modules compiled into the helpers (wormhole-william MIT, golang.org/x/crypto
+BSD, …), e.g. with `go-licenses save`.
+
 ## License
 
 MIT. wormhole-william is MIT too.
