@@ -97,6 +97,46 @@ step(6, function()
     check(run().active == nil, "transfer finished")
 end)
 
+-- 2b. E-ink: opening and closing the dialog must ask for a screen refresh of its
+-- area (screenshots read memory, not the panel, so check the requests instead)
+local function refreshes_while(f)
+    local calls, orig = {}, UIManager.setDirty
+    UIManager.setDirty = function(self, w, rt, ...)
+        calls[#calls + 1] = { w = w, rt = rt }
+        return orig(self, w, rt, ...)
+    end
+    local ok, err = pcall(f)
+    UIManager.setDirty = orig
+    assert(ok, err)
+    return calls
+end
+local function asks_ui_refresh_of(calls, dimen)
+    for __, c in ipairs(calls) do
+        if type(c.rt) == "function" then
+            local mode, region = c.rt()
+            if mode == "ui" and region and dimen and region:contains(dimen) then return true end
+        end
+    end
+    return false
+end
+step(1, function()
+    local d = top() -- the "Sent" dialog
+    local dimen = d.frame.dimen:copy()
+    local calls = refreshes_while(function() d.buttons[1].callback() end) -- Close
+    check(asks_ui_refresh_of(calls, dimen), "closing the dialog refreshes its area on the screen")
+end)
+step(1, function()
+    local d = require("wh_ui").TransferDialog:new{ subject = "x", status = "y", buttons = { { text = "OK" } } }
+    local calls = refreshes_while(function() UIManager:show(d) end)
+    UIManager:setDirty(d, "ui") -- let it paint so its frame gets a position
+    UIManager:scheduleIn(0.1, function() end)
+    Tour.shown_calls, Tour.shown = calls, d
+end)
+step(1, function()
+    check(asks_ui_refresh_of(Tour.shown_calls, Tour.shown.frame.dimen), "showing the dialog refreshes its area on the screen")
+    UIManager:close(Tour.shown)
+end)
+
 -- 3. Receive a file: offer, accept, saved
 step(1, function()
     close_dialogs()

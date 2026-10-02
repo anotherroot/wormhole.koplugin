@@ -89,6 +89,16 @@ function TransferDialog:update(fields)
     end)
 end
 
+-- E-ink only redraws what is asked for: refresh our area when shown and when
+-- closed (without this the closed dialog stays on the panel).
+function TransferDialog:onShow()
+    UIManager:setDirty(self, function() return "ui", self.frame.dimen end)
+end
+
+function TransferDialog:onCloseWidget()
+    UIManager:setDirty(nil, function() return "ui", self.frame.dimen end)
+end
+
 -- Back key = the first button (Cancel / Close / Reject).
 function TransferDialog:onClose()
     local first = self.buttons and self.buttons[1]
