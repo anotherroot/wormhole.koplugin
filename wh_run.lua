@@ -127,7 +127,9 @@ function Run:_callbacks()
         code = function(code)
             self.dialog:update{
                 code = code,
-                hint = _("Type it in any Wormhole app:\nwormhole receive · Warp · Destiny"),
+                -- a phone app can scan this instead of typing the code
+                qr = fmt.transfer_uri(code, files.settings(G_reader_settings).rendezvous),
+                hint = _("Scan it, or type it in any Wormhole app:\nwormhole receive · Warp · Wormhole"),
                 status = _("Waiting for the receiver…"),
             }
         end,
@@ -155,7 +157,7 @@ function Run:_callbacks()
             end
             self.last_redraw = time.now()
             self.dialog:update{
-                hint = false,
+                hint = false, qr = false,
                 status = T(_("%1 / %2"), fmt.size(done), fmt.size(total)),
                 progress = total > 0 and done / total or 0,
                 buttons = { self:_cancel_button() },
@@ -168,7 +170,7 @@ function Run:_callbacks()
         saved = function() end, -- read from session.saved_path in done()
         done = function()
             if o.role == "send" then
-                self.dialog:update{ hint = false, status = _("Sent ✓"), progress = false,
+                self.dialog:update{ hint = false, qr = false, status = _("Sent ✓"), progress = false,
                                     buttons = { self:_close_button() } }
             elseif self.session.saved_path then
                 self:_show_saved(self.session.saved_path)
@@ -212,7 +214,7 @@ function Run:_show_failure(kind, detail)
             M.ask_and_receive(self.opts.plugin_dir, self.opts.ui, code)
         end) })
     end
-    self.dialog:update{ hint = false, progress = false, status = text, buttons = buttons }
+    self.dialog:update{ hint = false, qr = false, progress = false, status = text, buttons = buttons }
 end
 
 --- Show a folder in the file browser (from the reader or the file browser).

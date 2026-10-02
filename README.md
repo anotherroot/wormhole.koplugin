@@ -24,6 +24,9 @@ words. Wormhole → Settings → **When sending text**: Ask each time (default),
 Always as text, or Always as a file. Use a file for apps that can't receive
 text messages: Warp and the Android Wormhole app (built on magic-wormhole.rs).
 
+While the device waits, the send screen also shows the code as a **QR code**:
+scan it with a phone app instead of typing the code.
+
 **On the other side** use any Magic Wormhole app:
 - a computer: the `wormhole` command (`pip install magic-wormhole`, or your
   package manager), then `wormhole receive` or `wormhole send <file>`

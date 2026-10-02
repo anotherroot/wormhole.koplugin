@@ -82,3 +82,19 @@ describe("wh_format.describe text as a file", function()
         assert.equal("Hola.txt", fmt.describe({ kind = "text", text = "Hola", file_name = "Hola.txt" }))
     end)
 end)
+
+describe("wh_format.transfer_uri", function()
+    it("is the standard wormhole-transfer link for the default server", function()
+        assert.equal("wormhole-transfer:7-guitarist-revenge", fmt.transfer_uri("7-guitarist-revenge"))
+        assert.equal("wormhole-transfer:7-guitarist-revenge", fmt.transfer_uri("7-guitarist-revenge", ""))
+    end)
+
+    it("adds an own server, percent-encoded", function()
+        assert.equal("wormhole-transfer:7-a-b?rendezvous=ws%3A%2F%2Fmy.host%3A4000%2Fv1",
+            fmt.transfer_uri("7-a-b", "ws://my.host:4000/v1"))
+    end)
+
+    it("percent-encodes anything unusual in the code", function()
+        assert.equal("wormhole-transfer:7-a%20b%3F", fmt.transfer_uri("7-a b?"))
+    end)
+end)

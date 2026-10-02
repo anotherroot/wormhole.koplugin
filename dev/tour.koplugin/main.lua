@@ -87,6 +87,14 @@ step(3, function()
     shot("01-send-code")
     local code = run().active.dialog.code
     check(code and code:match("^%d+%-"), "send shows a code: " .. tostring(code))
+    check(run().active.dialog.qr == require("wh_format").transfer_uri(code), "send shows a QR of the link")
+    local function has_qr(w)
+        if type(w) ~= "table" then return false end
+        if w.image and w.text and w.text:find("^wormhole%-transfer:") then return true end
+        for __, child in ipairs(w) do if has_qr(child) then return true end end
+        return false
+    end
+    check(has_qr(run().active.dialog[1]), "the QR is drawn in the dialog")
     local pid = run().active.handle.pid
     local p = io.popen("readlink /proc/" .. pid .. "/cwd; tr '\\0' ' ' < /proc/" .. pid .. "/cmdline")
     local cwd, cmdline = p:read("*l"), p:read("*l") or ""
@@ -103,6 +111,7 @@ step(1, function()
 end)
 step(6, function()
     shot("02-sent")
+    check(top().qr == nil, "the QR is gone once sent")
     check((read("cli-text.txt") or ""):match("biblioteca"), "CLI received the text")
     check(run().active == nil, "transfer finished")
 end)

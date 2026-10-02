@@ -22,6 +22,15 @@ SDL_VIDEODRIVER=offscreen KO_HOME="$PWD/.dev/home" XDG_DOCUMENTS_DIR="$OUT" \
 	timeout 240 nix run nixpkgs#appimage-run -- ".dev/koreader-v2026.03.AppImage" "$OUT" \
 	>"$OUT/koreader.log" 2>&1 || true
 
+# The QR on the send screen must decode to the code's link.
+code=$(sed -n 's/^PASS send shows a code: //p' "$OUT/log.txt")
+qr=$(nix shell nixpkgs#zbar -c zbarimg -q --raw "$OUT/01-send-code.png" 2>/dev/null || true)
+if [[ -n "$code" && "$qr" == "wormhole-transfer:$code" ]]; then
+	echo "PASS QR on the send screen decodes to $qr" >>"$OUT/log.txt"
+else
+	echo "FAIL QR on the send screen decodes to '$qr', want wormhole-transfer:$code" >>"$OUT/log.txt"
+fi
+
 cat "$OUT/log.txt"
 echo "Screenshots: $OUT/*.png"
 grep -q '^END' "$OUT/log.txt" || { echo "Tour did not finish (see $OUT/koreader.log)"; exit 1; }

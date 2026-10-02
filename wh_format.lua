@@ -61,6 +61,20 @@ function M.text_filename(text)
     return table.concat(words, " ") .. ".txt"
 end
 
+local function urlencode(s)
+    return (s:gsub("[^%w%-%._~]", function(c) return string.format("%%%02X", c:byte()) end))
+end
+
+--- The standard link a phone app scans: wormhole-transfer:<code>, plus
+-- ?rendezvous=<server> when an own server is set (magic-wormhole URI scheme).
+function M.transfer_uri(code, rendezvous)
+    local uri = "wormhole-transfer:" .. urlencode(code)
+    if rendezvous and rendezvous ~= "" then
+        uri = uri .. "?rendezvous=" .. urlencode(rendezvous)
+    end
+    return uri
+end
+
 --- What the wait screen calls the thing being sent.
 -- what = { kind = "text", text = … } | { kind = "file", path = … }
 --      | { kind = "files", name = …, paths = {…} }

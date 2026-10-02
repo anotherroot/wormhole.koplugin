@@ -4,10 +4,12 @@ local ButtonTable = require("ui/widget/buttontable")
 local CenterContainer = require("ui/widget/container/centercontainer")
 local Device = require("device")
 local Font = require("ui/font")
+local Geom = require("ui/geometry")
 local FrameContainer = require("ui/widget/container/framecontainer")
 local InputContainer = require("ui/widget/container/inputcontainer")
 local InputDialog = require("ui/widget/inputdialog")
 local ProgressWidget = require("ui/widget/progresswidget")
+local QRWidget = require("ui/widget/qrwidget")
 local Size = require("ui/size")
 local TextBoxWidget = require("ui/widget/textboxwidget")
 local TextViewer = require("ui/widget/textviewer")
@@ -20,10 +22,10 @@ local Screen = Device.screen
 local M = {}
 
 --- The one dialog a transfer uses from start to end. Change it with update().
--- Fields: subject, code, hint, status, progress (0..1 or nil),
+-- Fields: subject, code, qr (text to show as a QR code), hint, status, progress (0..1 or nil),
 --         buttons = { { text = …, callback = … }, … } (one row)
 local TransferDialog = InputContainer:extend{
-    subject = nil, code = nil, hint = nil, status = nil, progress = nil, buttons = nil,
+    subject = nil, code = nil, qr = nil, hint = nil, status = nil, progress = nil, buttons = nil,
 }
 M.TransferDialog = TransferDialog
 
@@ -46,6 +48,15 @@ function TransferDialog:_build()
     if self.subject then text(self.subject, Font:getFace("cfont")) end
     if self.code then
         text(self.code, Font:getFace("cfont", 32))
+    end
+    if self.qr then
+        -- about a third of the screen: big enough for a phone camera on e-ink
+        local size = math.floor(math.min(Screen:getWidth(), Screen:getHeight()) / 3)
+        table.insert(group, CenterContainer:new{
+            dimen = Geom:new{ w = inner, h = size },
+            QRWidget:new{ text = self.qr, width = size, height = size },
+        })
+        table.insert(group, VerticalSpan:new{ width = Size.padding.large })
     end
     if self.hint then text(self.hint, Font:getFace("x_smallinfofont")) end
     if self.status then text(self.status, Font:getFace("cfont")) end
