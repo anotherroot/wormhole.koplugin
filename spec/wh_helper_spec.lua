@@ -73,6 +73,16 @@ describe("wh_helper", function()
         h:cleanup()
     end)
 
+    it("passes the temp folder for zipping folders", function()
+        local bin = fake.write(tmp, { '{"ev":"done"}' })
+        local h = assert(helper.start({ bin = bin, command = "send-files", name = "B", paths = { "/b" },
+                                        zip_tmp = "/mnt/onboard/.adds/koreader/cache/wormhole", tmp = tmp }))
+        fake.poll_until(h, has("done"))
+        assert.equal("send-files --control " .. h.dir .. " --tmp /mnt/onboard/.adds/koreader/cache/wormhole --name B /b",
+            io.open(h.dir .. "/argv"):read("*l"))
+        h:cleanup()
+    end)
+
     it("delivers the answer to a waiting helper", function()
         local bin = fake.write(tmp, { '{"ev":"offer","kind":"file","name":"D.epub","bytes":5}', "wait-answer" })
         local h = assert(helper.start({ bin = bin, command = "receive", code = "1-x", save_dir = tmp, tmp = tmp }))

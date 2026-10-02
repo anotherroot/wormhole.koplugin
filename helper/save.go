@@ -9,19 +9,53 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"unicode/utf8"
 )
 
 // CleanName reduces a name sent by the other side to a safe base name:
-// no directories, no leading dots, never empty.
+// no directories, no leading dots, FAT-safe characters, a length that leaves
+// room for ".partial-" and " (2)", never empty.
 func CleanName(name string) string {
 	name = strings.ReplaceAll(name, "\\", "/")
 	name = filepath.Base(name)
-	name = strings.TrimLeft(name, ".")
-	name = strings.TrimSpace(name)
+	name = strings.TrimLeft(fatSafe(name), ". ")
 	if name == "" || name == "/" {
 		return "received"
 	}
-	return name
+	return limitBytes(name, maxNameBytes)
+}
+
+// maxNameBytes keeps ".partial-" + name + " (99)" + ".zip" within FAT's 255.
+const maxNameBytes = 200
+
+// fatSafe replaces characters FAT (the Kobo's storage) refuses with "_" and
+// drops trailing dots and spaces, which FAT silently strips.
+func fatSafe(s string) string {
+	s = strings.Map(func(r rune) rune {
+		if r < 0x20 || r == 0x7f || strings.ContainsRune(`:*?"<>|\\`, r) {
+			return '_'
+		}
+		return r
+	}, s)
+	return strings.TrimRight(s, ". ")
+}
+
+// limitBytes shortens the part before the extension to max bytes, cutting at
+// a character boundary.
+func limitBytes(name string, max int) string {
+	ext := filepath.Ext(name)
+	if len(ext) > 20 {
+		ext = ""
+	}
+	stem := name[:len(name)-len(ext)]
+	if len(stem) <= max {
+		return name
+	}
+	n := max
+	for n > 0 && !utf8.RuneStart(stem[n]) {
+		n--
+	}
+	return stem[:n] + ext
 }
 
 // UniquePath returns dir/name, or dir/"stem (2)ext", "(3)", … if taken.
@@ -135,6 +169,7 @@ func unzip(ctx context.Context, zipPath, dest string) error {
 		if !strings.HasPrefix(target, dest+string(os.PathSeparator)) {
 			return fmt.Errorf("%w: %s", errZipEscape, f.Name)
 		}
+		target = safeTarget(dest, target)
 		if f.FileInfo().IsDir() {
 			if err := os.MkdirAll(target, 0o755); err != nil {
 				return err
@@ -179,4 +214,19 @@ func (c cancelReader) Read(p []byte) (int, error) {
 		return 0, err
 	}
 	return c.r.Read(p)
+}
+
+// safeTarget makes every part of a path inside dest FAT-safe.
+func safeTarget(dest, target string) string {
+	rel, err := filepath.Rel(dest, target)
+	if err != nil {
+		return target
+	}
+	parts := strings.Split(rel, string(os.PathSeparator))
+	for i, p := range parts {
+		if parts[i] = fatSafe(p); parts[i] == "" {
+			parts[i] = "_"
+		}
+	}
+	return filepath.Join(append([]string{dest}, parts...)...)
 }

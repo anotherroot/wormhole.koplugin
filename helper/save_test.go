@@ -174,3 +174,37 @@ func TestSaveDirStopsWhenCancelled(t *testing.T) {
 		t.Fatalf("left behind: %v", entries)
 	}
 }
+
+// The Kobo's storage is FAT: these characters make file creation fail.
+func TestCleanNameIsFATSafe(t *testing.T) {
+	cases := map[string]string{
+		"Dune: Messiah.epub":               "Dune_ Messiah.epub",
+		`Who Moved My Cheese?.pdf`:         "Who Moved My Cheese_.pdf",
+		`a*b"c<d>e|f.txt`:                  "a_b_c_d_e_f.txt",
+		"tab\there\x01.epub":               "tab_here_.epub",
+		"trailing dots... ":                "trailing dots",
+		" .hidden":                         "hidden",
+		"ñandú — 📚.epub":                   "ñandú — 📚.epub",
+		strings.Repeat("é", 200) + ".epub": strings.Repeat("é", 100) + ".epub",
+	}
+	for in, want := range cases {
+		if got := CleanName(in); got != want {
+			t.Errorf("CleanName(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
+func TestSaveDirMakesEntryNamesFATSafe(t *testing.T) {
+	dir := t.TempDir()
+	p, err := SaveDir(context.Background(), dir, "Shelf: new?",
+		makeZip(t, map[string]string{"Sci-Fi: Best?/A <1>.epub": "A"}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p != filepath.Join(dir, "Shelf_ new_") {
+		t.Fatalf("folder %s", p)
+	}
+	if b, _ := os.ReadFile(filepath.Join(p, "Sci-Fi_ Best_", "A _1_.epub")); string(b) != "A" {
+		t.Fatalf("entry not saved under a FAT-safe name")
+	}
+}

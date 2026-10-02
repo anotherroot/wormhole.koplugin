@@ -43,7 +43,8 @@ Handle.__index = Handle
 --- Start a transfer.
 -- spec = { bin = path, command = "send-text"|"send-file"|"send-files"|"receive",
 --          text = s (send-text), paths = {…} (send-file: one), name = s (send-files),
---          code = s, save_dir = s (receive), rendezvous = s?, relay = s?, tmp = "/tmp" }
+--          code = s, save_dir = s (receive), rendezvous = s?, relay = s?,
+--          zip_tmp = s? (helper temp folder, on the storage), tmp = "/tmp" (working folders) }
 -- Returns a handle, or nil + error message.
 function M.start(spec)
     local mk = io.popen("mktemp -d " .. quote((spec.tmp or "/tmp") .. "/wormhole.XXXXXX"))
@@ -57,6 +58,9 @@ function M.start(spec)
     end
     if spec.relay and spec.relay ~= "" then
         table.insert(args, "--relay"); table.insert(args, spec.relay)
+    end
+    if spec.zip_tmp and spec.zip_tmp ~= "" then
+        table.insert(args, "--tmp"); table.insert(args, spec.zip_tmp)
     end
     if spec.command == "send-text" then
         local f = io.open(dir .. "/text", "wb")

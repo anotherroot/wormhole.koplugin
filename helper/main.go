@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 
 	"github.com/psanford/wormhole-william/wormhole"
@@ -20,7 +21,7 @@ const usage = `usage:
   wormhole-helper send-file  --control DIR [opts] PATH
   wormhole-helper send-files --control DIR [opts] --name NAME PATH...
   wormhole-helper receive    --control DIR [opts] --code CODE --dir DIR
-opts: --rendezvous URL --relay HOST:PORT`
+opts: --rendezvous URL --relay HOST:PORT --tmp DIR`
 
 func main() {
 	os.Exit(run(os.Args[1:], NewEmitter(os.Stdout)))
@@ -40,9 +41,17 @@ func run(args []string, em *Emitter) int {
 	name := fl.String("name", "", "folder name for send-files")
 	code := fl.String("code", "", "code to receive")
 	dir := fl.String("dir", "", "folder to save received files in")
+	tmp := fl.String("tmp", "", "folder for temporary files (default: $TMPDIR or /tmp)")
 	if err := fl.Parse(args[1:]); err != nil {
 		fmt.Fprintln(os.Stderr, usage)
 		return 2
+	}
+
+	if *tmp != "" {
+		if err := useTmpDir(*tmp); err != nil {
+			em.Error(err)
+			return 1
+		}
 	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT)
@@ -77,4 +86,18 @@ func run(args []string, em *Emitter) int {
 	}
 	fmt.Fprintln(os.Stderr, err)
 	return 1
+}
+
+// useTmpDir makes dir the temp folder (wormhole-william zips a folder there
+// before sending it). On a Kobo /tmp is RAM, so the plugin passes a folder on
+// the storage. Temp zips left by a helper that was killed are removed first.
+func useTmpDir(dir string) error {
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return err
+	}
+	stale, _ := filepath.Glob(filepath.Join(dir, "wormhole-william-dir*"))
+	for _, p := range stale {
+		os.Remove(p)
+	}
+	return os.Setenv("TMPDIR", dir)
 }
