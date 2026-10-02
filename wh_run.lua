@@ -37,6 +37,7 @@ Run.__index = Run
 -- opts = { plugin_dir = …, ui = ReaderUI|FileManager,
 --          role = "send", what = { kind = "text"|"file"|"files", … } }
 --      | { …, role = "receive", code = "7-a-b" }
+--      | { …, role = "receive", new_code = true } (make the code here, show it as a QR)
 function M.start(opts)
     if M.active then
         message(_("A Wormhole transfer is already running."))
@@ -68,7 +69,7 @@ function Run:_spec()
                    zip_tmp = DataStorage:getDataDir() .. "/cache/wormhole",
                    watch_pid = helper.self_pid() }
     if o.role == "receive" then
-        spec.command, spec.code = "receive", o.code
+        spec.command, spec.code, spec.new_code = "receive", o.code, o.new_code
         spec.save_dir = files.save_dir(G_reader_settings, Device.home_dir)
         if not files.ensure_dir(spec.save_dir) then
             return nil, T(_("Can't create the folder %1"), spec.save_dir)
@@ -91,7 +92,7 @@ function Run:_begin()
     self.dialog = whui.TransferDialog:new{
         subject = o.role == "send" and T(_("Sending: %1"), fmt.describe(o.what)) or _("Receiving"),
         code = o.role == "receive" and o.code or nil,
-        status = o.role == "send" and _("Getting a code…") or _("Connecting…"),
+        status = (o.role == "send" or o.new_code) and _("Getting a code…") or _("Connecting…"),
         buttons = { self:_cancel_button() },
     }
     UIManager:show(self.dialog)
@@ -125,10 +126,20 @@ function Run:_callbacks()
     local o = self.opts
     return {
         code = function(code)
+            local rendezvous = files.settings(G_reader_settings).rendezvous
+            if o.role == "receive" then -- a code made here: whoever scans it sends (role=leader)
+                self.dialog:update{
+                    code = code,
+                    qr = fmt.transfer_uri(code, rendezvous, true),
+                    hint = T(_("Scan it with the Wormhole app, or on a computer:\nwormhole send --code %1 <file>"), code),
+                    status = _("Waiting for the sender…"),
+                }
+                return
+            end
             self.dialog:update{
                 code = code,
                 -- a phone app can scan this instead of typing the code
-                qr = fmt.transfer_uri(code, files.settings(G_reader_settings).rendezvous),
+                qr = fmt.transfer_uri(code, rendezvous),
                 hint = _("Scan it, or type it in any Wormhole app:\nwormhole receive · Warp · Wormhole"),
                 status = _("Waiting for the receiver…"),
             }
@@ -138,6 +149,7 @@ function Run:_callbacks()
                 and T(_("Folder '%1', %2 files, %3."), ev.name, ev.files or "?", fmt.size(ev.bytes))
                 or T(_("%1, %2."), ev.name, fmt.size(ev.bytes))
             self.dialog:update{
+                hint = false, qr = false, -- the sender found us: the QR has done its job
                 status = what .. " " .. _("Accept?"),
                 buttons = {
                     { text = _("Reject"), callback = safe.guarded(function()
@@ -198,16 +210,22 @@ function Run:_show_saved(path)
                 UIManager:close(self.dialog)
                 require("apps/filemanager/filemanagerutil").openFile(self.opts.ui, path)
             end) }
-    self.dialog:update{ code = false, hint = false, progress = false,
+    self.dialog:update{ code = false, hint = false, qr = false, progress = false,
                         status = T(_("Saved to %1"), short),
                         buttons = { self:_close_button(), open_button } }
 end
 
 function Run:_show_failure(kind, detail)
-    local text = fmt.error_message(kind, self.opts.role, detail)
+    local o = self.opts
+    local text = fmt.error_message(kind, o.new_code and "receive_new" or o.role, detail)
     if not text then UIManager:close(self.dialog) return end
     local buttons = { self:_close_button() }
-    if kind == "bad_code" and self.opts.role == "receive" then
+    if kind == "bad_code" and o.new_code then -- codes are single-use: show a new one
+        table.insert(buttons, { text = _("Try again"), callback = safe.guarded(function()
+            UIManager:close(self.dialog)
+            M.receive_by_qr(o.plugin_dir, o.ui)
+        end) })
+    elseif kind == "bad_code" and o.role == "receive" then
         local code = self.opts.code
         table.insert(buttons, { text = _("Try again"), callback = safe.guarded(function()
             UIManager:close(self.dialog)
@@ -288,7 +306,12 @@ function M.ask_and_receive(plugin_dir, ui, prefill)
             return
         end
         M.start({ plugin_dir = plugin_dir, ui = ui, role = "receive", code = code })
-    end))
+    end), safe.guarded(function() M.receive_by_qr(plugin_dir, ui) end))
+end
+
+--- Make a code here and show it as a QR: the sender scans it (or types it).
+function M.receive_by_qr(plugin_dir, ui)
+    M.start({ plugin_dir = plugin_dir, ui = ui, role = "receive", new_code = true })
 end
 
 return M

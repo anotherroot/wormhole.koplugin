@@ -17,7 +17,7 @@ Status: experimental. Tested on a Kobo Colour with KOReader v2026.03.
 | Menu → Tools → Wormhole → **Send current book** | the open book |
 | File browser: long-press a file or folder → **Send via wormhole** | that file, or the whole folder |
 | File browser select mode, then Menu → Tools → Wormhole → **Send selected files (N)** | the ticked files, as one folder |
-| Menu → Tools → Wormhole → **Receive…** | type a code to receive text, a file or a folder |
+| Menu → Tools → Wormhole → **Receive…** | type a code to receive text, a file or a folder, or **Show a QR code** (below) |
 
 Text can go as a text message or as a small `.txt` file named after its first
 words. Wormhole → Settings → **When sending text**: Ask each time (default),
@@ -26,6 +26,16 @@ text messages: Warp and the Android Wormhole app (built on magic-wormhole.rs).
 
 While the device waits, the send screen also shows the code as a **QR code**:
 scan it with a phone app instead of typing the code.
+
+**Receiving with a code made here:** Receive… → **Show a QR code**. The device
+makes a code and shows it with a QR of `wormhole-transfer:<code>?role=leader`
+("whoever scans this sends"). On a computer, send to it with
+`wormhole send --code <code> <file>`. A phone needs an app that can send to a
+scanned code: the Wormhole File Transfer app can't yet (an update for it is
+in the works); today's app would try to receive instead, so nothing arrives
+(press Cancel). The code is made on the device, not by the
+server; in the rare case that someone else uses the same number at that
+moment, the transfer fails as a wrong code, and **Try again** shows a new one.
 
 **On the other side** use any Magic Wormhole app:
 - a computer: the `wormhole` command (`pip install magic-wormhole`, or your
@@ -101,7 +111,7 @@ Needs Nix (for luajit, busted, luacheck and appimage-run), Go, and the
 
 ## Later
 
-QR code for the code, code-word completion while typing, background
+Code-word completion while typing, background
 transfers, saving received text, resuming a broken transfer.
 
 Before publishing a release zip: add the third-party license notices of the

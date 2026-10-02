@@ -49,6 +49,8 @@ describe("wh_format.error_message", function()
     it("explains a wrong code from both sides", function()
         assert.matches("code didn't work", fmt.error_message("bad_code", "receive"))
         assert.matches("receiver typed a wrong code", fmt.error_message("bad_code", "send"))
+        -- receiving with a code made here: the sender typed it wrong (or a rare clash)
+        assert.matches("sender used a different code", fmt.error_message("bad_code", "receive_new"))
     end)
 
     it("shows the detail for helper failures", function()
@@ -92,6 +94,12 @@ describe("wh_format.transfer_uri", function()
     it("adds an own server, percent-encoded", function()
         assert.equal("wormhole-transfer:7-a-b?rendezvous=ws%3A%2F%2Fmy.host%3A4000%2Fv1",
             fmt.transfer_uri("7-a-b", "ws://my.host:4000/v1"))
+    end)
+
+    it("asks the scanner to send (role=leader) when this device receives", function()
+        assert.equal("wormhole-transfer:7-a-b?role=leader", fmt.transfer_uri("7-a-b", nil, true))
+        assert.equal("wormhole-transfer:7-a-b?rendezvous=ws%3A%2F%2Fh%2Fv1&role=leader",
+            fmt.transfer_uri("7-a-b", "ws://h/v1", true))
     end)
 
     it("percent-encodes anything unusual in the code", function()

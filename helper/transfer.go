@@ -2,14 +2,17 @@ package main
 
 import (
 	"context"
+	"crypto/rand"
 	"errors"
 	"fmt"
 	"io"
 	"io/fs"
+	"math/big"
 	"os"
 	"path/filepath"
 	"strings"
 
+	"github.com/psanford/wormhole-william/wordlist"
 	"github.com/psanford/wormhole-william/wormhole"
 )
 
@@ -245,3 +248,23 @@ func Receive(ctx context.Context, c *wormhole.Client, em *Emitter, code, saveDir
 
 // errAlreadyReported: the error event was emitted already; exit non-zero quietly.
 var errAlreadyReported = errors.New("already reported")
+
+// NewCode makes a code for receiving: a nameplate 1000–9999 and two words,
+// like the codes senders get. wormhole-william can't ask the server for a
+// nameplate when receiving, but claiming an unused one works; one in use
+// fails safely, like a wrong code.
+func NewCode() string {
+	n, err := rand.Int(rand.Reader, big.NewInt(9000))
+	if err != nil {
+		panic(err) // the system's random source is broken
+	}
+	return fmt.Sprintf("%d-%s", 1000+n.Int64(), wordlist.ChooseWords(2))
+}
+
+// ReceiveNewCode makes a code, reports it (the plugin shows it as a QR for
+// the sender to scan), then receives with it.
+func ReceiveNewCode(ctx context.Context, c *wormhole.Client, em *Emitter, saveDir, controlDir string) error {
+	code := NewCode()
+	em.Emit(Event{Ev: "code", Code: code})
+	return Receive(ctx, c, em, code, saveDir, controlDir)
+}

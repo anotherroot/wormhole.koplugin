@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"sync"
 	"testing"
@@ -398,6 +399,55 @@ func TestRoundTripTextAsFile(t *testing.T) {
 	}
 	if b, _ := os.ReadFile(filepath.Join(save, "Dónde está.txt")); string(b) != weirdText {
 		t.Fatalf("content %q", b)
+	}
+	if err := snd.wait(t); err != nil {
+		t.Fatalf("sender: %v", err)
+	}
+}
+
+func TestNewCode(t *testing.T) {
+	re := regexp.MustCompile(`^[1-9][0-9]{3}-[a-z]+-[a-z]+$`)
+	seen := map[string]bool{}
+	for i := 0; i < 50; i++ {
+		code := NewCode()
+		if !re.MatchString(code) {
+			t.Fatalf("code %q", code)
+		}
+		seen[code] = true
+	}
+	if len(seen) < 45 {
+		t.Fatalf("only %d different codes in 50", len(seen))
+	}
+}
+
+// The receiver makes the code (the Kobo shows it as a QR); the sender uses it.
+func TestRoundTripReceiverMakesTheCode(t *testing.T) {
+	cs, cr := testClients(t)
+	ctx := context.Background()
+	save, control := t.TempDir(), t.TempDir()
+	rcv := start(func(em *Emitter) error { return ReceiveNewCode(ctx, cr, em, save, control) })
+	code := rcv.log.waitFor(t, "code").Code
+
+	src := filepath.Join(t.TempDir(), "Dune.epub")
+	os.WriteFile(src, []byte("spice"), 0o644)
+	snd := start(func(em *Emitter) error {
+		f, err := os.Open(src)
+		if err != nil {
+			return err
+		}
+		defer f.Close()
+		_, ch, err := cs.SendFile(ctx, "Dune.epub", f, wormhole.WithCode(code))
+		return waitSent(ctx, em, code, ch, err)
+	})
+	if offer := rcv.log.waitFor(t, "offer"); offer.Name != "Dune.epub" {
+		t.Fatalf("offer %+v", offer)
+	}
+	answer(t, control, "accept")
+	if err := rcv.wait(t); err != nil {
+		t.Fatal(err)
+	}
+	if b, _ := os.ReadFile(rcv.log.waitFor(t, "saved").Path); string(b) != "spice" {
+		t.Fatal("content differs")
 	}
 	if err := snd.wait(t); err != nil {
 		t.Fatalf("sender: %v", err)

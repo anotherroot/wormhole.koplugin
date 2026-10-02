@@ -66,12 +66,16 @@ local function urlencode(s)
 end
 
 --- The standard link a phone app scans: wormhole-transfer:<code>, plus
--- ?rendezvous=<server> when an own server is set (magic-wormhole URI scheme).
-function M.transfer_uri(code, rendezvous)
-    local uri = "wormhole-transfer:" .. urlencode(code)
+-- rendezvous=<server> when an own server is set, and role=leader when this
+-- device receives ("whoever scans this sends"). magic-wormhole URI scheme.
+function M.transfer_uri(code, rendezvous, leader)
+    local query = {}
     if rendezvous and rendezvous ~= "" then
-        uri = uri .. "?rendezvous=" .. urlencode(rendezvous)
+        table.insert(query, "rendezvous=" .. urlencode(rendezvous))
     end
+    if leader then table.insert(query, "role=leader") end
+    local uri = "wormhole-transfer:" .. urlencode(code)
+    if #query > 0 then uri = uri .. "?" .. table.concat(query, "&") end
     return uri
 end
 
@@ -91,11 +95,14 @@ function M.describe(what)
 end
 
 --- Message for an error kind, or nil when nothing should be shown.
--- role: "send" | "receive"
+-- role: "send" | "receive" | "receive_new" (receiving with a code made here)
 function M.error_message(kind, role, detail)
     if kind == "cancelled" then return nil end
     if kind == "bad_code" then
         if role == "send" then return _("The receiver typed a wrong code. Send again to get a new code.") end
+        if role == "receive_new" then
+            return _("The sender used a different code. Try again for a new code.")
+        end
         return _("That code didn't work. Check it and try again.")
     elseif kind == "rejected" then
         return _("The other side cancelled.")

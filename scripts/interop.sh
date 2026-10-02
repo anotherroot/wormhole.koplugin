@@ -69,6 +69,22 @@ check "folder wormhole -> helper" 'diff -r Shelf save/Shelf >/dev/null'
 helper_receive --text "hola ¿qué tal?"
 check "text  wormhole -> helper" 'grep -q "\"text\":\"hola ¿qué tal?\"" ev'
 
+# Our helper makes the code (the Kobo shows it as a QR), the wormhole command sends to it
+mkdir -p save-new
+rm -f c/answer
+"$H" receive --control c --new-code --dir save-new >ev 2>err &
+HP=$!
+for _ in $(seq 100); do grep -q '"code"' ev && break; sleep 0.1; done
+CODE=$(sed -n 's/.*"code":"\([^"]*\)".*/\1/p' ev)
+check "new code looks like 1234-word-word ($CODE)" '[[ "$CODE" =~ ^[1-9][0-9]{3}-[a-z]+-[a-z]+$ ]]'
+timeout 90 wormhole send --hide-progress --code "$CODE" Big.epub >/dev/null 2>&1 &
+WP=$!
+for _ in $(seq 300); do grep -q '"offer"' ev && break; sleep 0.1; done
+echo accept >c/answer.tmp && mv c/answer.tmp c/answer
+wait $HP
+wait $WP
+check "file  wormhole -> helper's own code" 'cmp -s Big.epub save-new/Big.epub'
+
 # Wrong words with a real sender: both sides fail, ours says bad_code
 CODE="$((RANDOM % 900 + 100))-$(date +%s)-interop"
 timeout 60 wormhole send --text secret --code "$CODE" >/dev/null 2>&1 &

@@ -61,7 +61,7 @@ Handle.__index = Handle
 --- Start a transfer.
 -- spec = { bin = path, command = "send-text"|"send-file"|"send-files"|"receive",
 --          text = s (send-text), paths = {…} (send-file: one), name = s (send-files),
---          code = s, save_dir = s (receive), rendezvous = s?, relay = s?,
+--          code = s or new_code = true (make the code), save_dir = s (receive), rendezvous = s?, relay = s?,
 --          zip_tmp = s? (helper temp folder, on the storage), watch_pid = n? (KOReader),
 --          tmp = "/tmp" (working folders) }  All paths must be absolute.
 -- Returns a handle, or nil + error message.
@@ -95,7 +95,11 @@ function M.start(spec)
     elseif spec.command == "send-files" then
         table.insert(args, "--name"); table.insert(args, spec.name)
     elseif spec.command == "receive" then
-        table.insert(args, "--code"); table.insert(args, spec.code)
+        if spec.new_code then
+            table.insert(args, "--new-code")
+        else
+            table.insert(args, "--code"); table.insert(args, spec.code)
+        end
         table.insert(args, "--dir"); table.insert(args, spec.save_dir)
     end
     for __, p in ipairs(spec.paths or {}) do table.insert(args, p) end

@@ -2,11 +2,15 @@ package main
 
 import (
 	"context"
+	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"testing"
 	"time"
+
+	"github.com/psanford/wormhole-william/wormhole"
 )
 
 func TestUseTmpDir(t *testing.T) {
@@ -63,5 +67,43 @@ func TestWatchPIDCancelsWhenTheProcessIsGone(t *testing.T) {
 	case <-ctx.Done():
 	case <-time.After(time.Second):
 		t.Fatal("not cancelled after the process was gone")
+	}
+}
+
+func TestRunReceiveNeedsExactlyOneCodeFlag(t *testing.T) {
+	d := t.TempDir()
+	for _, args := range [][]string{
+		{"receive", "--control", d, "--dir", d},
+		{"receive", "--control", d, "--dir", d, "--code", "7-a-b", "--new-code"},
+	} {
+		if got := run(args, NewEmitter(io.Discard)); got != 2 {
+			t.Fatalf("run(%v) = %d, want 2 (usage)", args, got)
+		}
+	}
+}
+
+func TestRunReceiveNewCode(t *testing.T) {
+	cs, _ := testClients(t)
+	save, control := t.TempDir(), t.TempDir()
+	rcv := start(func(em *Emitter) error {
+		if got := run([]string{"receive", "--control", control, "--rendezvous", cs.RendezvousURL,
+			"--new-code", "--dir", save}, em); got != 0 {
+			return fmt.Errorf("exit %d", got)
+		}
+		return nil
+	})
+	code := rcv.log.waitFor(t, "code").Code
+	snd := start(func(em *Emitter) error {
+		_, ch, err := cs.SendText(context.Background(), "hello", wormhole.WithCode(code))
+		return waitSent(context.Background(), em, code, ch, err)
+	})
+	if err := rcv.wait(t); err != nil {
+		t.Fatal(err)
+	}
+	if got := rcv.log.waitFor(t, "text").Text; got != "hello" {
+		t.Fatalf("text %q", got)
+	}
+	if err := snd.wait(t); err != nil {
+		t.Fatalf("sender: %v", err)
 	}
 }

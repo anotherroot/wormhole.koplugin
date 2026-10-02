@@ -22,7 +22,7 @@ const usage = `usage:
   wormhole-helper send-text  --control DIR [opts] --text-file F [--file-name NAME]
   wormhole-helper send-file  --control DIR [opts] PATH
   wormhole-helper send-files --control DIR [opts] --name NAME PATH...
-  wormhole-helper receive    --control DIR [opts] --code CODE --dir DIR
+  wormhole-helper receive    --control DIR [opts] (--code CODE | --new-code) --dir DIR
 opts: --rendezvous URL --relay HOST:PORT --tmp DIR --watch-pid PID`
 
 func main() {
@@ -43,6 +43,7 @@ func run(args []string, em *Emitter) int {
 	name := fl.String("name", "", "folder name for send-files")
 	fileName := fl.String("file-name", "", "send-text: send the text as a file with this name")
 	code := fl.String("code", "", "code to receive")
+	newCode := fl.Bool("new-code", false, "receive: make the code here (reported as a code event)")
 	dir := fl.String("dir", "", "folder to save received files in")
 	tmp := fl.String("tmp", "", "folder for temporary files (default: $TMPDIR or /tmp)")
 	watch := fl.Int("watch-pid", 0, "stop when this process (KOReader) is gone")
@@ -82,7 +83,9 @@ func run(args []string, em *Emitter) int {
 		err = SendFile(ctx, c, em, fl.Arg(0))
 	case cmd == "send-files" && *name != "" && fl.NArg() >= 1:
 		err = SendFiles(ctx, c, em, *name, fl.Args())
-	case cmd == "receive" && *code != "" && *dir != "" && *control != "":
+	case cmd == "receive" && *newCode && *code == "" && *dir != "" && *control != "":
+		err = ReceiveNewCode(ctx, c, em, *dir, *control)
+	case cmd == "receive" && !*newCode && *code != "" && *dir != "" && *control != "":
 		err = Receive(ctx, c, em, *code, *dir, *control)
 	default:
 		fmt.Fprintln(os.Stderr, usage)

@@ -51,6 +51,10 @@ describe("wh_helper", function()
         assert.equal("receive --control " .. h.dir .. " --rendezvous ws://r --relay t:1 --code 7-a-b --dir /x/Wormhole",
             io.open(h.dir .. "/argv"):read("*l"))
         h:cleanup()
+        h = assert(helper.start({ bin = bin, command = "receive", new_code = true, save_dir = "/x/W", tmp = tmp }))
+        fake.poll_until(h, has("done"))
+        assert.equal("receive --control " .. h.dir .. " --new-code --dir /x/W", io.open(h.dir .. "/argv"):read("*l"))
+        h:cleanup()
         h = assert(helper.start({ bin = bin, command = "send-files", name = "Wormhole files",
                                   paths = { "/a b/c.epub", "/d" }, tmp = tmp }))
         fake.poll_until(h, has("done"))

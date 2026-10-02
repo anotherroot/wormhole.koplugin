@@ -117,16 +117,21 @@ function TransferDialog:onClose()
     return true
 end
 
---- Ask for a code. on_code(text) gets what was typed (not cleaned).
-function M.ask_code(prefill, on_code)
+--- Ask for a code. on_code(text) gets what was typed (not cleaned);
+-- on_qr() means: make a code here and show it as a QR for the sender.
+function M.ask_code(prefill, on_code, on_qr)
     local dialog
     dialog = InputDialog:new{
         title = _("Receive with Wormhole"),
         input = prefill or "",
         input_hint = "7-guitarist-revenge",
-        description = _("Enter the code from the sender."),
+        description = _("Enter the code from the sender, or show a QR code for the sender to scan."),
         buttons = { {
             { text = _("Cancel"), id = "close", callback = function() UIManager:close(dialog) end },
+            { text = _("Show a QR code"), callback = function()
+                UIManager:close(dialog)
+                on_qr()
+            end },
             { text = _("Receive"), is_enter_default = true, callback = function()
                 local text = dialog:getInputText()
                 UIManager:close(dialog)

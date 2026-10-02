@@ -175,6 +175,34 @@ step(6, function()
     check(read("Wormhole/Dune.epub") == read("Dune.epub"), "received file is identical")
 end)
 
+-- 3b. Receive with a code made here: Receive… → Show a QR code, the CLI sends to it
+step(1, function()
+    close_dialogs()
+    run().ask_and_receive(plugin_dir, fm())
+end)
+step(2, function()
+    check(press(top(), "Show a QR code"), "Receive… offers Show a QR code")
+end)
+step(3, function()
+    shot("04b-receive-qr")
+    local d = run().active and run().active.dialog
+    local code = d and d.code
+    check(code and code:match("^%d%d%d%d%-%l+%-%l+$"), "receive shows a code: " .. tostring(code))
+    check(d and d.qr == require("wh_format").transfer_uri(code, nil, true), "receive QR is the role=leader link")
+    check(d and d.hint and d.hint:find("wormhole send --code " .. tostring(code), 1, true), "receive hint shows the CLI command")
+    sh(WH .. " send --hide-progress --code " .. code .. " Dune.epub > cli-send-qr.txt 2>&1 &")
+end)
+step(6, function()
+    local d = run().active.dialog
+    check(d.status:match("Dune.epub, 1.5 MB. Accept?"), "offer from the sender who used our code")
+    check(d.qr == nil, "the QR is gone once the sender is there")
+    d.buttons[2].callback()
+end)
+step(6, function()
+    shot("04c-receive-qr-saved")
+    check(read("Wormhole/Dune (2).epub") == read("Dune.epub"), "file sent to our code is identical")
+end)
+
 -- 4. Receive text
 step(1, function()
     close_dialogs()
