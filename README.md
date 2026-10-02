@@ -70,6 +70,7 @@ the screens. Cancel stops the helper.
 | `wh_ui.lua` | the transfer dialog, the code box, the received-text popup |
 | `wh_format.lua` | code clean-up, sizes, messages |
 | `wh_files.lua` | settings and folders |
+| `wh_safe.lua` | crash guards for every callback KOReader calls |
 | `helper/` | the Go helper and `build.sh` |
 
 ## Development
