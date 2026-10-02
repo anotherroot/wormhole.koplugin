@@ -1,0 +1,234 @@
+--[[--
+Screen tour (development only, never installed on a device).
+scripts/tour.sh links this into .dev/home/plugins, runs the laptop KOReader
+headless, and this plugin drives real transfers against the `wormhole`
+command, takes a screenshot of each screen, and writes PASS/FAIL lines to
+$WH_TOUR_OUT/log.txt.
+--]]--
+local UIManager = require("ui/uimanager")
+local WidgetContainer = require("ui/widget/container/widgetcontainer")
+
+local OUT = os.getenv("WH_TOUR_OUT")
+local BOOK = os.getenv("WH_BOOK")
+-- time-limited, so a failed tour never leaves wormhole processes behind
+local WH = "timeout 120 " .. (os.getenv("WH_CLI") or "wormhole")
+
+local Tour = WidgetContainer:extend{ name = "tour", is_doc_only = false }
+
+local log = OUT and io.open(OUT .. "/log.txt", "w")
+local function L(...)
+    log:write(table.concat({ ... }, " "), "\n")
+    log:flush()
+end
+local function check(ok, what) L(ok and "PASS" or "FAIL", what) end
+local function shot(name)
+    require("device").screen:shot(OUT .. "/" .. name .. ".png")
+end
+local function sh(cmd) os.execute("cd '" .. OUT .. "' && " .. cmd) end
+local function read(name)
+    local f = io.open(OUT .. "/" .. name, "rb")
+    if not f then return nil end
+    local s = f:read("*a")
+    f:close()
+    return s
+end
+local function run() return require("wh_run") end
+local function fm() return require("apps/filemanager/filemanager").instance end
+local function top() return UIManager._window_stack[#UIManager._window_stack].widget end
+local function close_dialogs()
+    for i = #UIManager._window_stack, 1, -1 do
+        local w = UIManager._window_stack[i].widget
+        if not w.covers_fullscreen then UIManager:close(w) end
+    end
+end
+
+local base = tostring(os.time() % 100000)
+local plugin_dir
+
+local steps = {}
+local function step(delay, f) steps[#steps + 1] = { delay, f } end
+local function play(i)
+    local s = steps[i]
+    if not s then return end
+    UIManager:scheduleIn(s[1], function()
+        local ok, err = pcall(s[2])
+        if not ok then L("FAIL step", i, tostring(err)) end
+        play(i + 1)
+    end)
+end
+
+-- 1. File browser button is registered
+step(3, function()
+    require("wh_files").set(G_reader_settings, "save_dir", nil) -- default: <device home>/Wormhole
+    local FileManager = require("apps/filemanager/filemanager")
+    local added = FileManager.file_dialog_added_buttons
+    check(added and added.index.wormhole ~= nil, "file dialog button registered")
+    local row = added[added.index.wormhole]("/x/Dune.epub", true)
+    check(row[1].text == "Send via wormhole", "file dialog button text")
+end)
+
+-- 2. Send text; a second transfer meanwhile is refused
+step(1, function()
+    run().start({ plugin_dir = plugin_dir, ui = fm(), role = "send",
+                  what = { kind = "text", text = "¿Dónde está la biblioteca?" } })
+end)
+step(3, function()
+    shot("01-send-code")
+    local code = run().active.dialog.code
+    check(code and code:match("^%d+%-"), "send shows a code: " .. tostring(code))
+    run().start({ plugin_dir = plugin_dir, ui = fm(), role = "send",
+                  what = { kind = "text", text = "second" } })
+end)
+step(1, function()
+    check(top().text and top().text:match("already running"), "second transfer refused")
+    UIManager:close(top())
+    sh(WH .. " receive --only-text " .. run().active.dialog.code .. " > cli-text.txt 2>&1 &")
+end)
+step(6, function()
+    shot("02-sent")
+    check((read("cli-text.txt") or ""):match("biblioteca"), "CLI received the text")
+    check(run().active == nil, "transfer finished")
+end)
+
+-- 3. Receive a file: offer, accept, saved
+step(1, function()
+    close_dialogs()
+    sh("head -c 1500000 /dev/urandom > Dune.epub")
+    sh(WH .. " send --hide-progress --code 1" .. base .. "-tour-file Dune.epub > cli-send.txt 2>&1 &")
+end)
+step(3, function()
+    run().start({ plugin_dir = plugin_dir, ui = fm(), role = "receive", code = "1" .. base .. "-tour-file" })
+end)
+step(5, function()
+    shot("03-offer")
+    check(run().active.dialog.status:match("Dune.epub, 1.5 MB. Accept?"), "offer shown")
+    run().active.dialog.buttons[2].callback()
+end)
+step(6, function()
+    shot("04-saved")
+    check(read("Wormhole/Dune.epub") == read("Dune.epub"), "received file is identical")
+end)
+
+-- 4. Receive text
+step(1, function()
+    close_dialogs()
+    sh(WH .. " send --text 'Hola desde el portátil.' --code 2" .. base .. "-tour-text > cli-send2.txt 2>&1 &")
+end)
+step(3, function()
+    run().start({ plugin_dir = plugin_dir, ui = fm(), role = "receive", code = "2" .. base .. "-tour-text" })
+end)
+step(5, function()
+    shot("05-text")
+    check(top().text == "Hola desde el portátil.", "received text shown")
+end)
+
+-- 5. Wrong code
+step(1, function()
+    close_dialogs()
+    sh(WH .. " send --text secret --code 3" .. base .. "-right-words > cli-send3.txt 2>&1 &")
+end)
+step(3, function()
+    run().start({ plugin_dir = plugin_dir, ui = fm(), role = "receive", code = "3" .. base .. "-wrong-words" })
+end)
+step(5, function()
+    shot("06-badcode")
+    local d = top()
+    check(d.status and d.status:match("didn't work"), "wrong code explained")
+    check(d.buttons[2] and d.buttons[2].text == "Try again", "Try again offered")
+end)
+
+-- 6. Send a folder
+step(1, function()
+    close_dialogs()
+    sh("mkdir -p Shelf/sub && echo A > Shelf/a.txt && echo B > Shelf/sub/b.txt && mkdir -p cli-recv")
+    run().start({ plugin_dir = plugin_dir, ui = fm(), role = "send",
+                  what = { kind = "files", name = "Shelf", paths = { OUT .. "/Shelf" } } })
+end)
+step(3, function()
+    shot("07-send-folder")
+    sh("cd cli-recv && " .. WH .. " receive --accept-file --hide-progress " .. run().active.dialog.code
+        .. " > ../cli-recv.txt 2>&1 &")
+end)
+step(6, function()
+    check(read("cli-recv/Shelf/sub/b.txt") == "B\n", "CLI received the folder")
+end)
+
+-- 6b. Select mode: "Send selected files (N)" in the Wormhole menu
+step(1, function()
+    close_dialogs()
+    fm().selected_files = { [OUT .. "/Dune.epub"] = true, [OUT .. "/Shelf/a.txt"] = true }
+    local item = fm().wormhole:menuItems()[1]
+    check(item.text_func() == "Send selected files (2)", "select mode menu text: " .. tostring(item.text_func()))
+    check(item.enabled_func() == true, "select mode menu enabled")
+    item.callback()
+end)
+step(3, function()
+    local what = run().active and run().active.opts.what
+    check(what and what.kind == "files" and #what.paths == 2 and what.name == "Wormhole files", "selected files sent as one folder")
+    run().active.dialog.buttons[1].callback()
+    fm().selected_files = nil
+end)
+step(2, function()
+    check(fm().wormhole:menuItems()[1].enabled_func() == false, "select mode menu disabled with nothing ticked")
+end)
+
+-- 7. Code box
+step(1, function()
+    close_dialogs()
+    run().ask_and_receive(plugin_dir, fm(), "7 Guitarist revenge")
+end)
+step(2, function() shot("08-askcode") end)
+
+-- 8. Reader: highlight button, existing highlight with note, current book
+step(1, function()
+    close_dialogs()
+    require("apps/reader/readerui"):showReader(BOOK)
+end)
+step(8, function()
+    local ReaderUI = require("apps/reader/readerui")
+    local hl = ReaderUI.instance.highlight
+    local fn = hl._highlight_buttons["12_h_wormhole"]
+    check(fn ~= nil, "highlight button registered")
+    hl.selected_text = { text = "Alice" }
+    local button = fn(hl, nil)
+    check(button.text == "Send via wormhole", "highlight button text")
+    button.callback()
+end)
+step(3, function()
+    shot("09-reader-send")
+    check(run().active and run().active.opts.what.text == "Alice", "selected text sent")
+    run().active.dialog.buttons[1].callback() -- Cancel
+end)
+step(2, function()
+    check(run().active == nil, "cancel finished the transfer")
+    local hl = require("apps/reader/readerui").instance.highlight
+    hl.selected_text = { text = "casa", note = "house" }
+    hl._highlight_buttons["12_h_wormhole"](hl, 1).callback()
+end)
+step(2, function()
+    check(run().active and run().active.opts.what.text == "casa\n\nhouse", "existing highlight sends its note")
+    run().active.dialog.buttons[1].callback()
+end)
+step(2, function()
+    local ui = require("apps/reader/readerui").instance
+    ui.wormhole:menuItems()[1].callback()
+end)
+step(3, function()
+    shot("10-send-book")
+    check(run().active and run().active.opts.what.path == BOOK, "send current book")
+    run().active.dialog.buttons[1].callback()
+end)
+step(2, function()
+    L("END")
+    UIManager:quit()
+end)
+
+function Tour:init()
+    if Tour.started or not OUT then return end
+    Tour.started = true
+    plugin_dir = self.path:gsub("/dev/tour%.koplugin$", "")
+    plugin_dir = os.getenv("WH_PLUGIN_DIR") or plugin_dir
+    play(1)
+end
+
+return Tour
