@@ -65,6 +65,7 @@ step(3, function()
     check(added and added.index.wormhole ~= nil, "file dialog button registered")
     local row = added[added.index.wormhole]("/x/Dune.epub", true)
     check(row[1].text == "Send via wormhole", "file dialog button text")
+    check(added[added.index.wormhole]("/x/Books/..", false) == nil, "no button on the ../ entry")
 end)
 
 -- 2. Send text; a second transfer meanwhile is refused
@@ -76,6 +77,12 @@ step(3, function()
     shot("01-send-code")
     local code = run().active.dialog.code
     check(code and code:match("^%d+%-"), "send shows a code: " .. tostring(code))
+    local pid = run().active.handle.pid
+    local p = io.popen("readlink /proc/" .. pid .. "/cwd; tr '\\0' ' ' < /proc/" .. pid .. "/cmdline")
+    local cwd, cmdline = p:read("*l"), p:read("*l") or ""
+    p:close()
+    check(cwd == "/", "helper runs in /: " .. tostring(cwd))
+    check(cmdline:find("--watch-pid " .. require("wh_helper").self_pid(), 1, true), "helper watches KOReader's PID")
     run().start({ plugin_dir = plugin_dir, ui = fm(), role = "send",
                   what = { kind = "text", text = "second" } })
 end)
@@ -151,6 +158,10 @@ step(3, function()
 end)
 step(6, function()
     check(read("cli-recv/Shelf/sub/b.txt") == "B\n", "CLI received the folder")
+    local zip_tmp = require("datastorage"):getDataDir() .. "/cache/wormhole"
+    local d = io.open(zip_tmp .. "/.")
+    if d then d:close() end
+    check(d ~= nil, "folder zipped in " .. zip_tmp .. ", not /tmp")
 end)
 
 -- 6b. Select mode: "Send selected files (N)" in the Wormhole menu
@@ -217,6 +228,17 @@ step(3, function()
     shot("10-send-book")
     check(run().active and run().active.opts.what.path == BOOK, "send current book")
     run().active.dialog.buttons[1].callback()
+end)
+
+-- 9. "Show folder" from the reader closes the book first
+step(2, function()
+    run().show_folder(require("apps/reader/readerui").instance, OUT .. "/Shelf")
+end)
+step(4, function()
+    shot("11-show-folder")
+    check(require("apps/reader/readerui").instance == nil, "Show folder closed the reader")
+    local fmi = require("apps/filemanager/filemanager").instance
+    check(fmi and fmi.file_chooser.path == OUT .. "/Shelf", "Show folder opened the folder: " .. tostring(fmi and fmi.file_chooser.path))
 end)
 step(2, function()
     L("END")

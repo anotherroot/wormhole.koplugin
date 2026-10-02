@@ -1,5 +1,6 @@
 -- Runs one transfer: Wi-Fi, helper process, poll loop, session, dialog,
 -- keeping the device awake. The only module that ties them together.
+local DataStorage = require("datastorage")
 local Device = require("device")
 local InfoMessage = require("ui/widget/infomessage")
 local NetworkMgr = require("ui/network/manager")
@@ -8,6 +9,8 @@ local UIManager = require("ui/uimanager")
 local fmt = require("wh_format")
 local files = require("wh_files")
 local helper = require("wh_helper")
+local lfs = require("libs/libkoreader-lfs")
+local safe = require("wh_safe")
 local session = require("wh_session")
 local whui = require("wh_ui")
 local logger = require("logger")
@@ -39,7 +42,8 @@ function M.start(opts)
         message(_("A Wormhole transfer is already running."))
         return
     end
-    local bin, why = helper.binary_path(opts.plugin_dir)
+    -- absolute: a Kobo's plugin path is relative, and the helper runs from /
+    local bin, why = helper.binary_path(helper.absolute(opts.plugin_dir, lfs.currentdir()))
     if not bin then
         message(fmt.error_message("internal", opts.role, why))
         return
@@ -59,7 +63,10 @@ end
 
 function Run:_spec()
     local o, s = self.opts, files.settings(G_reader_settings)
-    local spec = { bin = self.bin, rendezvous = s.rendezvous, relay = s.relay }
+    local spec = { bin = self.bin, rendezvous = s.rendezvous, relay = s.relay,
+                   -- folders are zipped here, on the storage: /tmp is RAM on a Kobo
+                   zip_tmp = DataStorage:getDataDir() .. "/cache/wormhole",
+                   watch_pid = helper.self_pid() }
     if o.role == "receive" then
         spec.command, spec.code = "receive", o.code
         spec.save_dir = files.save_dir(G_reader_settings, Device.home_dir)
@@ -105,11 +112,13 @@ function Run:_begin()
 end
 
 function Run:_cancel_button()
-    return { text = _("Cancel"), callback = function() self.session:cancel() end }
+    return { text = _("Cancel"), callback = safe.guarded(function()
+        if self.session then self.session:cancel() else UIManager:close(self.dialog) end
+    end) }
 end
 
 function Run:_close_button()
-    return { text = _("Close"), callback = function() UIManager:close(self.dialog) end }
+    return { text = _("Close"), callback = safe.guarded(function() UIManager:close(self.dialog) end) }
 end
 
 function Run:_callbacks()
@@ -129,14 +138,14 @@ function Run:_callbacks()
             self.dialog:update{
                 status = what .. " " .. _("Accept?"),
                 buttons = {
-                    { text = _("Reject"), callback = function()
+                    { text = _("Reject"), callback = safe.guarded(function()
                         self.session:reject()
                         self.handle:answer("reject")
-                    end },
-                    { text = _("Accept"), callback = function()
+                    end) },
+                    { text = _("Accept"), callback = safe.guarded(function()
                         self.handle:answer("accept")
                         self.dialog:update{ status = _("Starting…"), buttons = { self:_cancel_button() } }
-                    end },
+                    end) },
                 },
             }
         end,
@@ -179,14 +188,14 @@ function Run:_show_saved(path)
     if is_dir then is_dir:close() end
     local short = path:gsub("^" .. (Device.home_dir or ""):gsub("%p", "%%%0") .. "/", "")
     local open_button = is_dir
-        and { text = _("Show folder"), callback = function()
+        and { text = _("Show folder"), callback = safe.guarded(function()
                 UIManager:close(self.dialog)
                 M.show_folder(self.opts.ui, path)
-            end }
-        or { text = _("Open"), callback = function()
+            end) }
+        or { text = _("Open"), callback = safe.guarded(function()
                 UIManager:close(self.dialog)
                 require("apps/filemanager/filemanagerutil").openFile(self.opts.ui, path)
-            end }
+            end) }
     self.dialog:update{ code = false, hint = false, progress = false,
                         status = T(_("Saved to %1"), short),
                         buttons = { self:_close_button(), open_button } }
@@ -198,10 +207,10 @@ function Run:_show_failure(kind, detail)
     local buttons = { self:_close_button() }
     if kind == "bad_code" and self.opts.role == "receive" then
         local code = self.opts.code
-        table.insert(buttons, { text = _("Try again"), callback = function()
+        table.insert(buttons, { text = _("Try again"), callback = safe.guarded(function()
             UIManager:close(self.dialog)
             M.ask_and_receive(self.opts.plugin_dir, self.opts.ui, code)
-        end })
+        end) })
     end
     self.dialog:update{ hint = false, progress = false, status = text, buttons = buttons }
 end
@@ -209,6 +218,7 @@ end
 --- Show a folder in the file browser (from the reader or the file browser).
 function M.show_folder(ui, path)
     if ui.document then
+        ui:onClose() -- like KOReader's own "go to file browser": close the book first
         ui:showFileManager(path .. "/")
     else
         ui.file_chooser:changeToPath(path)
@@ -269,14 +279,14 @@ end
 
 --- Ask for a code, clean it, and receive.
 function M.ask_and_receive(plugin_dir, ui, prefill)
-    whui.ask_code(prefill, function(typed)
+    whui.ask_code(prefill, safe.guarded(function(typed)
         local code = fmt.normalize_code(typed)
         if not code then
             message(_("That doesn't look like a Wormhole code.\nCodes look like 7-guitarist-revenge."))
             return
         end
         M.start({ plugin_dir = plugin_dir, ui = ui, role = "receive", code = code })
-    end)
+    end))
 end
 
 return M

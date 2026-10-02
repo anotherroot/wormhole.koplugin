@@ -30,6 +30,12 @@ function M.ensure_dir(path)
     return false
 end
 
+--- True for the file browser's "../" entry (its path ends in "/..").
+function M.is_go_up(path)
+    local p = path:gsub("/+$", "")
+    return p == ".." or p:sub(-3) == "/.."
+end
+
 --- Paths ticked in the file browser's select mode, sorted.
 -- selected_files: { [path] = true|nil, … } (KOReader keeps dimmed ones as true).
 function M.selected_paths(selected_files)

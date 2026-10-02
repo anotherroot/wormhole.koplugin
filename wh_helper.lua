@@ -9,6 +9,22 @@ local function quote(s)
 end
 M.quote = quote
 
+--- KOReader's own process ID (the helper stops when it is gone).
+function M.self_pid()
+    local f = io.open("/proc/self/stat", "rb")
+    if not f then return nil end
+    local pid = tonumber((f:read("*l") or ""):match("^(%d+)"))
+    f:close()
+    return pid
+end
+
+--- path made absolute against cwd ("plugins/x" on a Kobo is relative to
+-- KOReader's folder, and the helper runs from /).
+function M.absolute(path, cwd)
+    if path:sub(1, 1) == "/" then return path end
+    return cwd:gsub("/+$", "") .. "/" .. path:gsub("^%./", "")
+end
+
 local ARCH = { armv7l = "armv7", armv6l = "armv7", aarch64 = "arm64", x86_64 = "x86_64" }
 
 --- Path of the helper for this machine, or nil + reason.
@@ -33,7 +49,9 @@ end
 function M.command(bin, args, dir)
     local parts = { quote(bin) }
     for __, a in ipairs(args) do parts[#parts + 1] = quote(a) end
-    return string.format("%s </dev/null >%s 2>%s & echo $!",
+    -- cd /: the helper must never keep the storage busy (USB mass storage).
+    -- ";" not "&&": "&" must apply to the helper alone, so $! is its PID.
+    return string.format("cd / || exit 1; %s </dev/null >%s 2>%s & echo $!",
         table.concat(parts, " "), quote(dir .. "/events"), quote(dir .. "/stderr"))
 end
 
@@ -44,7 +62,8 @@ Handle.__index = Handle
 -- spec = { bin = path, command = "send-text"|"send-file"|"send-files"|"receive",
 --          text = s (send-text), paths = {…} (send-file: one), name = s (send-files),
 --          code = s, save_dir = s (receive), rendezvous = s?, relay = s?,
---          zip_tmp = s? (helper temp folder, on the storage), tmp = "/tmp" (working folders) }
+--          zip_tmp = s? (helper temp folder, on the storage), watch_pid = n? (KOReader),
+--          tmp = "/tmp" (working folders) }  All paths must be absolute.
 -- Returns a handle, or nil + error message.
 function M.start(spec)
     local mk = io.popen("mktemp -d " .. quote((spec.tmp or "/tmp") .. "/wormhole.XXXXXX"))
@@ -58,6 +77,9 @@ function M.start(spec)
     end
     if spec.relay and spec.relay ~= "" then
         table.insert(args, "--relay"); table.insert(args, spec.relay)
+    end
+    if spec.watch_pid then
+        table.insert(args, "--watch-pid"); table.insert(args, tostring(spec.watch_pid))
     end
     if spec.zip_tmp and spec.zip_tmp ~= "" then
         table.insert(args, "--tmp"); table.insert(args, spec.zip_tmp)

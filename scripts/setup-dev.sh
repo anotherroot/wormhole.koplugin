@@ -24,7 +24,8 @@ fi
 
 ln -sfn "$PWD" .dev/home/plugins/wormhole.koplugin
 
-if [[ ! -x bin/wormhole-helper-x86_64 ]]; then
+# Rebuild when missing or older than the Go sources (a stale helper rejects new flags).
+if [[ ! -x bin/wormhole-helper-x86_64 ]] || [[ -n "$(find helper -name '*.go' -newer bin/wormhole-helper-x86_64)" ]]; then
 	helper/build.sh x86_64
 fi
 

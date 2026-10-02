@@ -83,6 +83,32 @@ describe("wh_helper", function()
         h:cleanup()
     end)
 
+    it("passes KOReader's PID to watch and starts the helper in /", function()
+        local bin = fake.write(tmp, { '{"ev":"done"}' })
+        local h = assert(helper.start({ bin = bin, command = "send-file", paths = { "/b.epub" }, watch_pid = 4242, tmp = tmp }))
+        fake.poll_until(h, has("done"))
+        assert.equal("send-file --control " .. h.dir .. " --watch-pid 4242 /b.epub", io.open(h.dir .. "/argv"):read("*l"))
+        -- never keeps the storage busy (USB mass storage needs to unmount it)
+        assert.equal("/", io.open(h.dir .. "/cwd"):read("*l"))
+        -- the PID we keep (for Cancel) is the helper's own, not a shell's
+        assert.equal(h.pid, tonumber(io.open(h.dir .. "/pid"):read("*l")))
+        h:cleanup()
+    end)
+
+    it("knows its own process ID", function()
+        local p = io.popen("echo $PPID") -- the shell's parent is this process
+        local expected = tonumber(p:read("*l"))
+        p:close()
+        assert.equal(expected, helper.self_pid())
+    end)
+
+    it("makes a relative plugin path absolute (KOReader's own plugins folder is relative)", function()
+        assert.equal("/mnt/onboard/.adds/koreader/plugins/wormhole.koplugin",
+            helper.absolute("plugins/wormhole.koplugin", "/mnt/onboard/.adds/koreader"))
+        assert.equal("/mnt/onboard/.adds/koreader/plugins/w", helper.absolute("./plugins/w", "/mnt/onboard/.adds/koreader"))
+        assert.equal("/abs/w", helper.absolute("/abs/w", "/elsewhere"))
+    end)
+
     it("delivers the answer to a waiting helper", function()
         local bin = fake.write(tmp, { '{"ev":"offer","kind":"file","name":"D.epub","bytes":5}', "wait-answer" })
         local h = assert(helper.start({ bin = bin, command = "receive", code = "1-x", save_dir = tmp, tmp = tmp }))

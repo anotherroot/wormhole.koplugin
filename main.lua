@@ -4,10 +4,8 @@ Wormhole: send and receive text, books and files with Magic Wormhole.
 @module koplugin.Wormhole
 --]]--
 local FileManager = require("apps/filemanager/filemanager")
-local InfoMessage = require("ui/widget/infomessage")
 local UIManager = require("ui/uimanager")
 local WidgetContainer = require("ui/widget/container/widgetcontainer")
-local logger = require("logger")
 local util = require("util")
 local _ = require("gettext")
 
@@ -16,26 +14,9 @@ local Wormhole = WidgetContainer:extend{
     is_doc_only = false,
 }
 
--- Run f safely: an error becomes a message, never a crash.
-local function guarded(f)
-    return function(...)
-        local ok, err = pcall(f, ...)
-        if not ok then
-            logger.err("Wormhole:", err)
-            UIManager:show(InfoMessage:new{ text = _("Wormhole error: ") .. tostring(err) })
-        end
-    end
-end
-
--- For text_func / enabled_func: on error return the fallback, never crash the menu.
-local function quietly(f, fallback)
-    return function(...)
-        local ok, value = pcall(f, ...)
-        if ok then return value end
-        logger.err("Wormhole:", value)
-        return fallback
-    end
-end
+-- Crash guards (wh_safe): guarded for actions, quietly for text_func / enabled_func.
+local safe = require("wh_safe")
+local guarded, quietly = safe.guarded, safe.quietly
 
 local function run() return require("wh_run") end
 local function fmt() return require("wh_format") end
@@ -76,7 +57,9 @@ end
 
 function Wormhole:addFileDialogButton()
     -- Registered on the FileManager class, so every file browser gets it once.
-    FileManager.addFileDialogButtons(FileManager, "wormhole", function(file, is_file)
+    -- quietly: KOReader builds the dialog with this; nil = no button (the "../" entry).
+    FileManager.addFileDialogButtons(FileManager, "wormhole", quietly(function(file, is_file)
+        if require("wh_files").is_go_up(file) then return nil end
         return {
             {
                 text = _("Send via wormhole"),
@@ -95,7 +78,7 @@ function Wormhole:addFileDialogButton()
                 end),
             },
         }
-    end)
+    end))
 end
 
 function Wormhole:addToMainMenu(menu_items)

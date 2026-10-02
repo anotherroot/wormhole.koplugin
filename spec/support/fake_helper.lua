@@ -11,7 +11,7 @@ local M = {}
 
 function M.write(dir, lines)
     local path = dir .. "/fake-helper"
-    local out = { "#!/bin/sh", 'control="$3"', 'echo "$@" > "$control/argv"' }
+    local out = { "#!/bin/sh", 'control="$3"', 'pwd > "$control/cwd"', 'echo $$ > "$control/pid"', 'echo "$@" > "$control/argv"' }
     for __, line in ipairs(lines) do
         if line == "wait-answer" then
             out[#out + 1] = 'while [ ! -f "$control/answer" ]; do sleep 0.05; done'

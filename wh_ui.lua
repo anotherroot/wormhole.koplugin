@@ -124,11 +124,11 @@ function M.show_text(text)
         title = _("Received with Wormhole"),
         text = text,
         buttons_table = { {
-            { text = _("Copy"), callback = function()
+            { text = _("Copy"), callback = require("wh_safe").guarded(function()
                 Device.input.setClipboardText(text)
                 local Notification = require("ui/widget/notification")
                 Notification:notify(_("Copied to clipboard."))
-            end },
+            end) },
             { text = _("Close"), callback = function() UIManager:close(viewer) end },
         } },
     }
