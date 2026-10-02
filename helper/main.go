@@ -11,7 +11,9 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strings"
 	"syscall"
+	"time"
 
 	"github.com/psanford/wormhole-william/wormhole"
 )
@@ -21,7 +23,7 @@ const usage = `usage:
   wormhole-helper send-file  --control DIR [opts] PATH
   wormhole-helper send-files --control DIR [opts] --name NAME PATH...
   wormhole-helper receive    --control DIR [opts] --code CODE --dir DIR
-opts: --rendezvous URL --relay HOST:PORT --tmp DIR`
+opts: --rendezvous URL --relay HOST:PORT --tmp DIR --watch-pid PID`
 
 func main() {
 	os.Exit(run(os.Args[1:], NewEmitter(os.Stdout)))
@@ -42,6 +44,7 @@ func run(args []string, em *Emitter) int {
 	code := fl.String("code", "", "code to receive")
 	dir := fl.String("dir", "", "folder to save received files in")
 	tmp := fl.String("tmp", "", "folder for temporary files (default: $TMPDIR or /tmp)")
+	watch := fl.Int("watch-pid", 0, "stop when this process (KOReader) is gone")
 	if err := fl.Parse(args[1:]); err != nil {
 		fmt.Fprintln(os.Stderr, usage)
 		return 2
@@ -56,6 +59,11 @@ func run(args []string, em *Emitter) int {
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT)
 	defer stop()
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	if *watch > 0 {
+		go watchPID(ctx, cancel, *watch, time.Second)
+	}
 	c := &wormhole.Client{RendezvousURL: *rendezvous, TransitRelayAddress: *relay}
 
 	var err error
@@ -100,4 +108,25 @@ func useTmpDir(dir string) error {
 		os.Remove(p)
 	}
 	return os.Setenv("TMPDIR", dir)
+}
+
+// watchPID cancels when process pid is gone (or a zombie): the helper must
+// not outlive KOReader (a crash, a restart, USB mass storage).
+func watchPID(ctx context.Context, cancel context.CancelFunc, pid int, every time.Duration) {
+	t := time.NewTicker(every)
+	defer t.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+		}
+		stat, err := os.ReadFile(fmt.Sprintf("/proc/%d/stat", pid))
+		// The state is the field after the ")" that closes the command name.
+		if i := strings.LastIndexByte(string(stat), ')'); err != nil || i < 0 ||
+			strings.HasPrefix(string(stat[i+1:]), " Z") {
+			cancel()
+			return
+		}
+	}
 }

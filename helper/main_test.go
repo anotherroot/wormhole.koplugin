@@ -1,9 +1,12 @@
 package main
 
 import (
+	"context"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"testing"
+	"time"
 )
 
 func TestUseTmpDir(t *testing.T) {
@@ -38,5 +41,27 @@ func TestUseTmpDirCreatesTheFolder(t *testing.T) {
 	}
 	if st, err := os.Stat(dir); err != nil || !st.IsDir() {
 		t.Fatalf("folder not created: %v", err)
+	}
+}
+
+func TestWatchPIDCancelsWhenTheProcessIsGone(t *testing.T) {
+	cmd := exec.Command("sleep", "0.3") // stands in for KOReader
+	if err := cmd.Start(); err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go watchPID(ctx, cancel, cmd.Process.Pid, 50*time.Millisecond)
+
+	select {
+	case <-ctx.Done():
+		t.Fatal("cancelled while the process was still running")
+	case <-time.After(100 * time.Millisecond):
+	}
+	cmd.Wait() // it exits and is reaped
+	select {
+	case <-ctx.Done():
+	case <-time.After(time.Second):
+		t.Fatal("not cancelled after the process was gone")
 	}
 }
