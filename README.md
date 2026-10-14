@@ -8,6 +8,27 @@ accounts, no cables, and the devices don't need to share a Wi-Fi.
 
 Status: experimental. Tested on a Kobo Colour with KOReader v2026.03.
 
+<table>
+<tr>
+<td><img src="screenshots/send-book.png" width="280" alt="Sending the open book: the code and its QR"></td>
+<td><img src="screenshots/receive.png" width="280" alt="Receive: type the code, or show a QR code"></td>
+</tr>
+<tr>
+<td align="center">Send: the code and its QR</td>
+<td align="center">Receive: type a code</td>
+</tr>
+<tr>
+<td><img src="screenshots/receive-qr.png" width="280" alt="Receive with a QR code made on the device"></td>
+<td><img src="screenshots/accept.png" width="280" alt="Accept or reject an incoming book"></td>
+</tr>
+<tr>
+<td align="center">…or show a QR for the sender</td>
+<td align="center">Accept or reject what comes in</td>
+</tr>
+</table>
+
+Screenshots: KOReader on a computer, taken by `scripts/tour.sh`.
+
 ## What you can do
 
 | Where in KOReader | What it sends |
@@ -104,7 +125,8 @@ Needs Nix (for luajit, busted, luacheck and appimage-run), Go, and the
   directions (needs internet).
 - `scripts/tour.sh`: runs KOReader headless with `dev/tour.koplugin`, which
   drives real transfers through every screen, prints PASS/FAIL and saves
-  screenshots to `.dev/tour/` (needs internet).
+  screenshots to `.dev/tour/` (needs internet). `screenshots/` holds
+  copies of four of them for this README.
 - `scripts/dev-run.sh [book or folder]`: KOReader on the computer with the
   plugin, its own settings in `.dev/home`, received files in `.dev/Wormhole`.
 - `helper/build.sh [armv7|arm64|x86_64]`: build helpers into `bin/`.
