@@ -51,8 +51,10 @@ Received text opens in a popup with a **Copy** button.
 
 ## Install
 
-1. Download the release zip and unpack `wormhole.koplugin` into KOReader's
-   `plugins/` folder (on a Kobo: `.adds/koreader/plugins/`).
+1. Download `wormhole.koplugin-<version>.zip` from the
+   [Releases page](https://github.com/anotherroot/wormhole.koplugin/releases)
+   and unpack `wormhole.koplugin` into KOReader's `plugins/` folder
+   (on a Kobo: `.adds/koreader/plugins/`).
 2. Restart KOReader.
 
 The zip contains helper programs for `armv7` (Kobo, most Kindles and
@@ -107,17 +109,16 @@ Needs Nix (for luajit, busted, luacheck and appimage-run), Go, and the
   plugin, its own settings in `.dev/home`, received files in `.dev/Wormhole`.
 - `helper/build.sh [armv7|arm64|x86_64]`: build helpers into `bin/`.
 - `scripts/install-kobo.sh`: copy onto a mounted Kobo (the owner's setup).
-- `scripts/release.sh <version>`: release zip with all three helpers in `.dev/`.
+- `scripts/release.sh <version>`: release zip with all three helpers and
+  the third-party licenses in `.dev/`.
 
 ## Later
 
 Code-word completion while typing, background
 transfers, saving received text, resuming a broken transfer.
 
-Before publishing a release zip: add the third-party license notices of the
-Go modules compiled into the helpers (wormhole-william MIT, golang.org/x/crypto
-BSD, …), e.g. with `go-licenses save`.
-
 ## License
 
-MIT. wormhole-william is MIT too.
+MIT. The helpers are built from wormhole-william (MIT) and a few other Go
+modules (MIT, BSD, ISC, Apache-2.0); their licenses are in
+`THIRD_PARTY_LICENSES.txt`, which `helper/licenses.sh` writes.

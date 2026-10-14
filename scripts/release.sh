@@ -5,10 +5,11 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 VERSION="${1:?usage: scripts/release.sh <version>}"
 helper/build.sh
+helper/licenses.sh
 STAGE="$(mktemp -d)"
 trap 'rm -rf "$STAGE"' EXIT
 mkdir -p "$STAGE/wormhole.koplugin/bin"
-cp ./*.lua README.md LICENSE "$STAGE/wormhole.koplugin/"
+cp ./*.lua README.md LICENSE THIRD_PARTY_LICENSES.txt "$STAGE/wormhole.koplugin/"
 cp bin/wormhole-helper-armv7 bin/wormhole-helper-arm64 bin/wormhole-helper-x86_64 "$STAGE/wormhole.koplugin/bin/"
 chmod +x "$STAGE"/wormhole.koplugin/bin/*
 mkdir -p .dev
