@@ -3,6 +3,7 @@ Wormhole: send and receive text, books and files with Magic Wormhole.
 
 @module koplugin.Wormhole
 --]]--
+local Dispatcher = require("dispatcher")
 local FileManager = require("apps/filemanager/filemanager")
 local UIManager = require("ui/uimanager")
 local WidgetContainer = require("ui/widget/container/widgetcontainer")
@@ -21,7 +22,17 @@ local guarded, quietly = safe.guarded, safe.quietly
 local function run() return require("wh_run") end
 local function fmt() return require("wh_format") end
 
+-- Actions for KOReader's gesture manager (Settings → Taps and gestures).
+function Wormhole:onDispatcherRegisterActions()
+    Dispatcher:registerAction("wormhole_receive", {
+        category = "none", event = "WormholeReceive", title = _("Wormhole: receive…"), general = true,
+    })
+end
+
+Wormhole.onWormholeReceive = guarded(function(self) run().ask_and_receive(self.path, self.ui) end)
+
 function Wormhole:init()
+    self:onDispatcherRegisterActions()
     self.ui.menu:registerToMainMenu(self)
     if self.ui.highlight then
         self:addHighlightButton()

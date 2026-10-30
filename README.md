@@ -39,6 +39,7 @@ Screenshots: KOReader on a computer, taken by `scripts/tour.sh`.
 | File browser: long-press a file or folder → **Send via wormhole** | that file, or the whole folder |
 | File browser select mode, then Menu → Tools → Wormhole → **Send selected files (N)** | the ticked files, as one folder |
 | Menu → Tools → Wormhole → **Receive…** | type a code to receive text, a file or a folder, or **Show a QR code** (below) |
+| Any gesture → **Wormhole: receive…** | the same, from a gesture: Settings → Taps and gestures → Gesture manager → pick a gesture → General |
 
 Text can go as a text message or as a small `.txt` file named after its first
 words. Wormhole → Settings → **When sending text**: Ask each time (default),
